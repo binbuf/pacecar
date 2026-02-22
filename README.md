@@ -2,6 +2,9 @@
 
 **Pacecar** is a lightweight, always-on-top system performance overlay built with **Rust** and **egui**. It provides real-time CPU, RAM, GPU, network, and disk I/O metrics in a compact, modern dashboard—similar to Windows Task Manager's Performance tab but as a floating overlay.
 
+![demo](https://github.com/user-attachments/assets/22632cc8-8842-433f-969b-964ccd3a0077)
+
+
 Designed for minimal overhead and a polished aesthetic, Pacecar aims to keep you informed about your system's health without getting in your way.
 
 ## ✨ Features
@@ -68,3 +71,4 @@ cargo test
 
 ## 📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.
+
