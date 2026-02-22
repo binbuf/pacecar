@@ -14,11 +14,56 @@ use crate::metrics::MetricsSnapshot;
 pub struct MetricColors;
 
 impl MetricColors {
-    pub const CPU: egui::Color32 = egui::Color32::from_rgb(100, 149, 237); // Cornflower blue
-    pub const RAM: egui::Color32 = egui::Color32::from_rgb(80, 200, 120); // Emerald green
-    pub const GPU: egui::Color32 = egui::Color32::from_rgb(230, 80, 80); // Soft red
-    pub const NETWORK: egui::Color32 = egui::Color32::from_rgb(255, 165, 0); // Orange
-    pub const DISK: egui::Color32 = egui::Color32::from_rgb(180, 130, 230); // Lavender purple
+    pub const CPU: egui::Color32 = egui::Color32::from_rgb(100, 160, 255); // Bright blue
+    pub const RAM: egui::Color32 = egui::Color32::from_rgb(80, 210, 130); // Emerald green
+    pub const GPU: egui::Color32 = egui::Color32::from_rgb(240, 90, 90); // Soft red
+    pub const NETWORK: egui::Color32 = egui::Color32::from_rgb(255, 175, 50); // Warm orange
+    pub const DISK: egui::Color32 = egui::Color32::from_rgb(180, 140, 240); // Lavender purple
+}
+
+/// Render the header bar with app name and gear button.
+/// Returns `true` if the gear button was clicked.
+pub fn render_header(ui: &mut egui::Ui) -> bool {
+    let mut gear_clicked = false;
+
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new("PACECAR")
+                .size(10.0)
+                .color(egui::Color32::from_rgb(120, 120, 140))
+                .strong(),
+        );
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let gear_btn = ui.add(
+                egui::Button::new(
+                    egui::RichText::new("\u{2699}")
+                        .size(14.0)
+                        .color(egui::Color32::from_rgb(150, 150, 170)),
+                )
+                .frame(false),
+            );
+            if gear_btn.clicked() {
+                gear_clicked = true;
+            }
+        });
+    });
+
+    ui.add_space(2.0);
+
+    // Subtle separator line
+    let rect = ui.available_rect_before_wrap();
+    let y = rect.top();
+    ui.painter().line_segment(
+        [
+            egui::pos2(rect.left() + 2.0, y),
+            egui::pos2(rect.right() - 2.0, y),
+        ],
+        egui::Stroke::new(0.5, egui::Color32::from_rgb(60, 60, 70)),
+    );
+    ui.add_space(4.0);
+
+    gear_clicked
 }
 
 /// Calculate the number of columns based on available width.
@@ -149,13 +194,15 @@ pub fn configure_visuals(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::dark();
 
     // Darker background
-    visuals.panel_fill = egui::Color32::from_rgba_unmultiplied(20, 20, 20, 0);
-    visuals.window_fill = egui::Color32::from_rgba_unmultiplied(20, 20, 20, 0);
+    visuals.panel_fill = egui::Color32::from_rgba_unmultiplied(20, 20, 24, 0);
+    visuals.window_fill = egui::Color32::from_rgba_unmultiplied(20, 20, 24, 0);
 
     // Subtle widget styling
-    visuals.widgets.noninteractive.bg_fill = egui::Color32::from_gray(35);
+    visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(35, 35, 40);
     visuals.widgets.noninteractive.fg_stroke =
-        egui::Stroke::new(1.0, egui::Color32::from_gray(180));
+        egui::Stroke::new(1.0, egui::Color32::from_gray(190));
+    visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(45, 45, 50);
+    visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(55, 55, 62);
 
     // Compact spacing
     let mut style = (*ctx.style()).clone();

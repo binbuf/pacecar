@@ -1,4 +1,4 @@
-// Settings overlay/modal
+// Settings popout window (separate OS viewport)
 
 use eframe::egui;
 
@@ -7,152 +7,252 @@ use crate::config::{Config, OverlayMode, Visualization};
 /// The allowed polling interval presets in milliseconds.
 const POLLING_PRESETS: &[u64] = &[250, 500, 1000, 2000, 5000];
 
-/// Renders the settings panel as a floating egui::Window.
-/// Returns `true` if the panel is still open, `false` if it was closed.
+/// Renders the settings panel as a separate OS-level popout window.
+/// Returns `true` if the window is still open, `false` if it was closed.
 pub fn show_settings(ctx: &egui::Context, config: &mut Config) -> bool {
     let mut open = true;
     let mut changed = false;
 
-    egui::Window::new("Settings")
-        .open(&mut open)
-        .collapsible(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-        .default_width(260.0)
-        .show(ctx, |ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(6.0, 8.0);
+    ctx.show_viewport_immediate(
+        egui::ViewportId::from_hash_of("pacecar_settings"),
+        egui::ViewportBuilder::default()
+            .with_title("Pacecar Settings")
+            .with_inner_size([340.0, 440.0])
+            .with_resizable(false)
+            .with_always_on_top()
+            .with_minimize_button(false)
+            .with_maximize_button(false),
+        |ctx, _class| {
+            if ctx.input(|i: &egui::InputState| i.viewport().close_requested()) {
+                open = false;
+                return;
+            }
 
-            // --- Polling Interval ---
-            ui.label(
-                egui::RichText::new("Polling Interval")
-                    .color(egui::Color32::from_gray(200))
-                    .strong(),
-            );
-            let current_label = format!("{} ms", config.polling_interval_ms);
-            egui::ComboBox::from_id_salt("polling_interval")
-                .selected_text(&current_label)
-                .show_ui(ui, |ui| {
-                    for &ms in POLLING_PRESETS {
-                        let label = format!("{ms} ms");
-                        if ui
-                            .selectable_value(&mut config.polling_interval_ms, ms, label)
-                            .changed()
-                        {
+            // Apply dark theme to the settings viewport
+            configure_settings_visuals(ctx);
+
+            egui::CentralPanel::default()
+                .frame(
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(24, 24, 28))
+                        .inner_margin(20.0),
+                )
+                .show(ctx, |ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+
+                    // --- Header ---
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            egui::RichText::new("Settings")
+                                .size(20.0)
+                                .color(egui::Color32::WHITE)
+                                .strong(),
+                        );
+                    });
+                    ui.add_space(12.0);
+
+                    // --- Polling Interval ---
+                    changed |= settings_section(ui, "Refresh Rate", |ui| {
+                        let current_label = format!("{} ms", config.polling_interval_ms);
+                        let mut section_changed = false;
+                        ui.horizontal(|ui| {
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    egui::ComboBox::from_id_salt("polling_interval")
+                                        .selected_text(&current_label)
+                                        .width(100.0)
+                                        .show_ui(ui, |ui| {
+                                            for &ms in POLLING_PRESETS {
+                                                let label = format!("{ms} ms");
+                                                if ui
+                                                    .selectable_value(
+                                                        &mut config.polling_interval_ms,
+                                                        ms,
+                                                        label,
+                                                    )
+                                                    .changed()
+                                                {
+                                                    section_changed = true;
+                                                }
+                                            }
+                                        });
+                                },
+                            );
+                        });
+                        section_changed
+                    });
+
+                    ui.add_space(4.0);
+
+                    // --- Transparency ---
+                    changed |= settings_section(ui, "Opacity", |ui| {
+                        let mut pct = config.transparency * 100.0;
+                        let slider = egui::Slider::new(&mut pct, 10.0..=100.0)
+                            .suffix("%")
+                            .fixed_decimals(0);
+                        let resp = ui.add(slider);
+                        if resp.changed() {
+                            config.transparency = pct / 100.0;
+                            return true;
+                        }
+                        false
+                    });
+
+                    ui.add_space(4.0);
+
+                    // --- Visualization Mode ---
+                    changed |= settings_section(ui, "Visualization", |ui| {
+                        let mut section_changed = false;
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 16.0;
+                            if ui
+                                .radio_value(
+                                    &mut config.visualization,
+                                    Visualization::Gauges,
+                                    "Gauges",
+                                )
+                                .changed()
+                            {
+                                section_changed = true;
+                            }
+                            if ui
+                                .radio_value(
+                                    &mut config.visualization,
+                                    Visualization::Sparklines,
+                                    "Sparklines",
+                                )
+                                .changed()
+                            {
+                                section_changed = true;
+                            }
+                        });
+                        section_changed
+                    });
+
+                    ui.add_space(4.0);
+
+                    // --- Overlay Mode ---
+                    changed |= settings_section(ui, "Overlay Mode", |ui| {
+                        let mut section_changed = false;
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 16.0;
+                            if ui
+                                .radio_value(
+                                    &mut config.overlay_mode,
+                                    OverlayMode::Interactive,
+                                    "Interactive",
+                                )
+                                .changed()
+                            {
+                                section_changed = true;
+                            }
+                            if ui
+                                .radio_value(
+                                    &mut config.overlay_mode,
+                                    OverlayMode::ClickThrough,
+                                    "Click-through",
+                                )
+                                .changed()
+                            {
+                                section_changed = true;
+                            }
+                        });
+                        section_changed
+                    });
+
+                    ui.add_space(4.0);
+
+                    // --- Hotkey ---
+                    changed |= settings_section(ui, "Toggle Hotkey", |ui| {
+                        let resp = ui.add(
+                            egui::TextEdit::singleline(&mut config.hotkey)
+                                .desired_width(160.0),
+                        );
+                        resp.changed()
+                    });
+
+                    ui.add_space(12.0);
+
+                    // --- Reset to Defaults ---
+                    ui.vertical_centered(|ui| {
+                        let btn = egui::Button::new(
+                            egui::RichText::new("Reset to Defaults").color(egui::Color32::from_rgb(200, 200, 200)),
+                        )
+                        .fill(egui::Color32::from_rgb(55, 55, 60))
+                        .rounding(6.0)
+                        .min_size(egui::vec2(160.0, 32.0));
+
+                        if ui.add(btn).clicked() {
+                            let defaults = Config::default();
+                            config.polling_interval_ms = defaults.polling_interval_ms;
+                            config.transparency = defaults.transparency;
+                            config.visualization = defaults.visualization;
+                            config.overlay_mode = defaults.overlay_mode;
+                            config.hotkey = defaults.hotkey;
                             changed = true;
                         }
-                    }
+                    });
                 });
+        },
+    );
 
-            ui.add_space(2.0);
-
-            // --- Transparency ---
-            ui.label(
-                egui::RichText::new("Transparency")
-                    .color(egui::Color32::from_gray(200))
-                    .strong(),
-            );
-            let mut pct = config.transparency * 100.0;
-            let slider = egui::Slider::new(&mut pct, 10.0..=100.0)
-                .suffix("%")
-                .fixed_decimals(0);
-            if ui.add(slider).changed() {
-                config.transparency = pct / 100.0;
-                changed = true;
-            }
-
-            ui.add_space(2.0);
-
-            // --- Visualization Mode ---
-            ui.label(
-                egui::RichText::new("Visualization")
-                    .color(egui::Color32::from_gray(200))
-                    .strong(),
-            );
-            ui.horizontal(|ui| {
-                if ui
-                    .radio_value(&mut config.visualization, Visualization::Gauges, "Gauges")
-                    .changed()
-                {
-                    changed = true;
-                }
-                if ui
-                    .radio_value(
-                        &mut config.visualization,
-                        Visualization::Sparklines,
-                        "Sparklines",
-                    )
-                    .changed()
-                {
-                    changed = true;
-                }
-            });
-
-            ui.add_space(2.0);
-
-            // --- Overlay Mode ---
-            ui.label(
-                egui::RichText::new("Overlay Mode")
-                    .color(egui::Color32::from_gray(200))
-                    .strong(),
-            );
-            ui.horizontal(|ui| {
-                if ui
-                    .radio_value(
-                        &mut config.overlay_mode,
-                        OverlayMode::Interactive,
-                        "Interactive",
-                    )
-                    .changed()
-                {
-                    changed = true;
-                }
-                if ui
-                    .radio_value(
-                        &mut config.overlay_mode,
-                        OverlayMode::ClickThrough,
-                        "Click-through",
-                    )
-                    .changed()
-                {
-                    changed = true;
-                }
-            });
-
-            ui.add_space(2.0);
-
-            // --- Hotkey ---
-            ui.label(
-                egui::RichText::new("Hotkey")
-                    .color(egui::Color32::from_gray(200))
-                    .strong(),
-            );
-            if ui.text_edit_singleline(&mut config.hotkey).changed() {
-                changed = true;
-            }
-
-            ui.add_space(6.0);
-            ui.separator();
-            ui.add_space(2.0);
-
-            // --- Reset to Defaults ---
-            if ui.button("Reset to Defaults").clicked() {
-                let defaults = Config::default();
-                config.polling_interval_ms = defaults.polling_interval_ms;
-                config.transparency = defaults.transparency;
-                config.visualization = defaults.visualization;
-                config.overlay_mode = defaults.overlay_mode;
-                config.hotkey = defaults.hotkey;
-                changed = true;
-            }
-        });
-
-    // Save on any change (live preview — changes are applied immediately via config mutation)
     if changed {
         config.clamp();
         let _ = config.save();
     }
 
     open
+}
+
+/// Render a settings section with a label and content inside a subtle card.
+/// Returns whether the content reported a change.
+fn settings_section(
+    ui: &mut egui::Ui,
+    title: &str,
+    content: impl FnOnce(&mut egui::Ui) -> bool,
+) -> bool {
+    let mut changed = false;
+
+    egui::Frame::none()
+        .fill(egui::Color32::from_rgb(32, 32, 36))
+        .rounding(8.0)
+        .inner_margin(egui::Margin::symmetric(12.0, 10.0))
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(50, 50, 55)))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(
+                egui::RichText::new(title)
+                    .size(11.0)
+                    .color(egui::Color32::from_rgb(140, 140, 160))
+                    .strong(),
+            );
+            ui.add_space(4.0);
+            changed = content(ui);
+        });
+
+    changed
+}
+
+/// Apply dark visuals to the settings viewport.
+fn configure_settings_visuals(ctx: &egui::Context) {
+    let mut visuals = egui::Visuals::dark();
+    visuals.panel_fill = egui::Color32::from_rgb(24, 24, 28);
+    visuals.window_fill = egui::Color32::from_rgb(24, 24, 28);
+    visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(40, 40, 45);
+    visuals.widgets.noninteractive.fg_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_gray(190));
+    visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(50, 50, 55);
+    visuals.widgets.inactive.fg_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_gray(180));
+    visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(65, 65, 72);
+    visuals.widgets.active.bg_fill = egui::Color32::from_rgb(75, 75, 82);
+    visuals.selection.bg_fill = egui::Color32::from_rgb(80, 120, 200);
+
+    let mut style = (*ctx.style()).clone();
+    style.spacing.item_spacing = egui::vec2(6.0, 6.0);
+    style.visuals = visuals;
+    ctx.set_style(style);
 }
 
 #[cfg(test)]
@@ -202,9 +302,8 @@ mod tests {
 
     #[test]
     fn transparency_slider_conversion_round_trip() {
-        // Simulate slider <-> config conversion
         let config_value: f32 = 0.75;
-        let slider_pct = config_value * 100.0; // 75.0
+        let slider_pct = config_value * 100.0;
         let back = slider_pct / 100.0;
         assert!((back - config_value).abs() < f32::EPSILON);
     }
@@ -212,7 +311,6 @@ mod tests {
     #[test]
     fn transparency_clamp_after_edit() {
         let mut config = Config::default();
-        // Simulate an out-of-range slider value that somehow gets through
         config.transparency = 0.05;
         config.clamp();
         assert_eq!(config.transparency, 0.1);

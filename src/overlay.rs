@@ -60,7 +60,7 @@ pub fn read_window_position(ctx: &egui::Context) -> Option<Position> {
 /// Compute the background color with the configured transparency alpha.
 pub fn background_color(transparency: f32) -> egui::Color32 {
     let alpha = (transparency.clamp(0.1, 1.0) * 255.0) as u8;
-    egui::Color32::from_rgba_unmultiplied(30, 30, 30, alpha)
+    egui::Color32::from_rgba_unmultiplied(22, 22, 26, alpha)
 }
 
 /// Check if a saved position is still on-screen. Returns `None` if off-screen.

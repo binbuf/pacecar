@@ -114,10 +114,10 @@ pub(crate) enum VisBranch {
 impl<'a> Widget for MetricPanel<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
         let panel_frame = egui::Frame::none()
-            .fill(Color32::from_rgba_unmultiplied(40, 40, 40, 200))
-            .rounding(6.0)
-            .inner_margin(8.0)
-            .stroke(egui::Stroke::new(1.0, self.color.linear_multiply(0.4)));
+            .fill(Color32::from_rgba_unmultiplied(34, 34, 40, 210))
+            .rounding(8.0)
+            .inner_margin(10.0)
+            .stroke(egui::Stroke::new(1.0, self.color.linear_multiply(0.3)));
 
         panel_frame
             .show(ui, |ui| {

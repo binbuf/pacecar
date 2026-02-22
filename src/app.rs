@@ -192,6 +192,13 @@ impl eframe::App for PacecarApp {
                     });
                 }
 
+                // Header bar with gear button
+                if self.config.overlay_mode == OverlayMode::Interactive
+                    && ui::render_header(ui_ctx)
+                {
+                    self.show_settings = true;
+                }
+
                 // Render metric panels or placeholder
                 if let Some(snapshot) = &self.snapshot {
                     ui::render_layout(ui_ctx, snapshot, self.config.visualization);
