@@ -109,7 +109,7 @@ impl Config {
         Self::load_from_path(Self::config_path())
     }
 
-    fn load_from_path(path: Option<PathBuf>) -> Self {
+    pub fn load_from_path(path: Option<PathBuf>) -> Self {
         let Some(path) = path else {
             eprintln!("warn: could not determine config directory, using defaults");
             return Self::default();
@@ -136,7 +136,7 @@ impl Config {
         self.save_to_path(&path)
     }
 
-    fn save_to_path(&self, path: &PathBuf) -> Result<(), String> {
+    pub fn save_to_path(&self, path: &PathBuf) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| format!("failed to create config directory: {e}"))?;

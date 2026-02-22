@@ -28,6 +28,9 @@ pub struct PacecarApp {
     tray_manager: Option<TrayManager>,
     /// Whether the overlay is currently visible.
     visible: bool,
+    /// Set to true when the user requests a full quit (tray Quit or context menu Quit).
+    /// Distinguishes quit from the X-button close (which hides to tray).
+    quit_requested: bool,
 }
 
 impl PacecarApp {
@@ -47,6 +50,7 @@ impl PacecarApp {
             hotkey_manager,
             tray_manager,
             visible: true,
+            quit_requested: false,
         }
     }
 
@@ -125,6 +129,7 @@ impl eframe::App for PacecarApp {
                         self.show_settings = true;
                     }
                     TrayAction::Quit => {
+                        self.quit_requested = true;
                         let _ = self.config.save();
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
@@ -175,6 +180,7 @@ impl eframe::App for PacecarApp {
                             ui_ctx.close_menu();
                         }
                         if ui_ctx.button("Quit").clicked() {
+                            self.quit_requested = true;
                             let _ = self.config.save();
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                             ui_ctx.close_menu();
@@ -217,8 +223,10 @@ impl eframe::App for PacecarApp {
 
         // Handle window close: hide to tray instead of quitting (when tray is available)
         if ctx.input(|i| i.viewport().close_requested()) {
-            if self.tray_manager.is_some() {
-                // Cancel the close and hide to tray instead
+            if self.quit_requested {
+                // Explicit quit — allow the close (config already saved by quit handler)
+            } else if self.tray_manager.is_some() {
+                // X button with tray available — cancel the close and hide to tray
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.visible = false;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));

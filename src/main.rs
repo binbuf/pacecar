@@ -1,16 +1,9 @@
-mod app;
-mod config;
-mod hotkey;
-mod metrics;
-mod overlay;
-mod tray;
-mod ui;
-
-use app::PacecarApp;
-use config::Config;
-use hotkey::HotkeyManager;
-use metrics::{SystemCollector, spawn_collector};
-use tray::TrayManager;
+use pacecar::app::PacecarApp;
+use pacecar::config::Config;
+use pacecar::hotkey::HotkeyManager;
+use pacecar::metrics::{SystemCollector, spawn_collector};
+use pacecar::overlay;
+use pacecar::tray::TrayManager;
 
 use std::time::Duration;
 
