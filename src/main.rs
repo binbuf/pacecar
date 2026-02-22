@@ -90,9 +90,11 @@ fn register_ctrl_handler(shutdown: pacecar::metrics::ShutdownSignal) {
             if let Some(s) = SHUTDOWN.get() {
                 s.trigger();
             }
-            // Give the collector thread a moment to finish.
-            std::thread::sleep(Duration::from_millis(100));
-            std::process::exit(0);
+            // Signal the eframe event loop to initiate a graceful close
+            // instead of calling process::exit(), which skips all destructors
+            // and can leave GPU resources in a bad state.
+            pacecar::CTRL_C_RECEIVED.store(true, std::sync::atomic::Ordering::SeqCst);
+            return 1; // handled — don't let Windows kill the process
         }
         0 // not handled
     }

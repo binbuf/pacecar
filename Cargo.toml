@@ -8,7 +8,7 @@ default = []
 nvidia = ["dep:nvml-wrapper"]
 
 [dependencies]
-eframe = "0.29"
+eframe = { version = "0.29", default-features = false, features = ["glow", "default_fonts"] }
 sysinfo = "0.33"
 tray-icon = "0.19"
 muda = "0.15"

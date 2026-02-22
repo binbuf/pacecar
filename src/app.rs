@@ -33,6 +33,10 @@ pub struct PacecarApp {
     /// Set to true when the user requests a full quit (tray Quit or context menu Quit).
     /// Distinguishes quit from the X-button close (which hides to tray).
     quit_requested: bool,
+    /// Two-phase close countdown. When > 0, we decrement each frame and only
+    /// issue `ViewportCommand::Close` when it reaches 0. This gives the GPU
+    /// driver a frame or two to flush pending commands before surface destruction.
+    close_countdown: u8,
 }
 
 impl PacecarApp {
@@ -54,6 +58,7 @@ impl PacecarApp {
             tray_manager,
             visible: true,
             quit_requested: false,
+            close_countdown: 0,
         }
     }
 
@@ -94,6 +99,29 @@ impl eframe::App for PacecarApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Two-phase close: count down frames before issuing Close to let the
+        // GPU driver flush pending commands before surface destruction.
+        if self.close_countdown > 0 {
+            self.close_countdown -= 1;
+            if self.close_countdown == 0 {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            } else {
+                ctx.request_repaint();
+            }
+        }
+
+        // Check for CTRL+C signal from the console handler
+        if crate::CTRL_C_RECEIVED.load(std::sync::atomic::Ordering::SeqCst) && !self.quit_requested
+        {
+            self.quit_requested = true;
+            let _ = self.config.save();
+            if !self.visible {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            }
+            self.close_countdown = 2;
+            ctx.request_repaint();
+        }
+
         // One-time visuals setup
         if !self.visuals_configured {
             ui::configure_visuals(ctx);
@@ -138,7 +166,8 @@ impl eframe::App for PacecarApp {
                         if !self.visible {
                             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
                         }
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        self.close_countdown = 2;
+                        ctx.request_repaint();
                     }
                 }
             }
@@ -191,7 +220,8 @@ impl eframe::App for PacecarApp {
                         if ui_ctx.button("Quit").clicked() {
                             self.quit_requested = true;
                             let _ = self.config.save();
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            self.close_countdown = 2;
+                            ctx.request_repaint();
                             ui_ctx.close_menu();
                         }
                     });
