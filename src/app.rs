@@ -8,6 +8,7 @@ use crate::config::{Config, OverlayMode, Position};
 use crate::hotkey::{HotkeyAction, HotkeyManager};
 use crate::metrics::{MetricsReceiver, MetricsSnapshot};
 use crate::overlay;
+use crate::tray::{TrayAction, TrayManager};
 use crate::ui;
 
 pub struct PacecarApp {
@@ -23,6 +24,8 @@ pub struct PacecarApp {
     show_settings: bool,
     /// Global hotkey manager (None if registration failed).
     hotkey_manager: Option<HotkeyManager>,
+    /// System tray manager (None if tray creation failed).
+    tray_manager: Option<TrayManager>,
     /// Whether the overlay is currently visible.
     visible: bool,
 }
@@ -32,6 +35,7 @@ impl PacecarApp {
         config: Config,
         receiver: MetricsReceiver,
         hotkey_manager: Option<HotkeyManager>,
+        tray_manager: Option<TrayManager>,
     ) -> Self {
         Self {
             last_saved_position: config.window_position,
@@ -41,7 +45,37 @@ impl PacecarApp {
             visuals_configured: false,
             show_settings: false,
             hotkey_manager,
+            tray_manager,
             visible: true,
+        }
+    }
+
+    /// Toggle overlay visibility and update the tray menu label.
+    fn toggle_visibility(&mut self, ctx: &egui::Context) {
+        self.visible = !self.visible;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(self.visible));
+
+        // If becoming visible while in click-through mode, switch to interactive
+        if self.visible && self.config.overlay_mode == OverlayMode::ClickThrough {
+            self.config.overlay_mode = OverlayMode::Interactive;
+            overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
+            let _ = self.config.save();
+        }
+
+        self.sync_tray_labels();
+    }
+
+    /// Toggle overlay mode between Interactive and Click-through.
+    fn toggle_mode(&mut self, ctx: &egui::Context) {
+        self.config.overlay_mode = overlay::toggle_overlay_mode(ctx, self.config.overlay_mode);
+        let _ = self.config.save();
+        self.sync_tray_labels();
+    }
+
+    /// Update tray menu labels to reflect current state.
+    fn sync_tray_labels(&self) {
+        if let Some(ref tray) = self.tray_manager {
+            tray.update_labels(self.visible, self.config.overlay_mode);
         }
     }
 }
@@ -67,15 +101,33 @@ impl eframe::App for PacecarApp {
         // Poll for global hotkey events
         if let Some(ref hk) = self.hotkey_manager {
             if let Some(HotkeyAction::ToggleOverlay) = hk.poll() {
-                self.visible = !self.visible;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(self.visible));
+                self.toggle_visibility(ctx);
+            }
+        }
 
-                // If becoming visible while in click-through mode, switch back to interactive
-                // so the user can actually interact with the overlay
-                if self.visible && self.config.overlay_mode == OverlayMode::ClickThrough {
-                    self.config.overlay_mode = OverlayMode::Interactive;
-                    overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
-                    let _ = self.config.save();
+        // Poll for tray events
+        if let Some(ref _tray) = self.tray_manager {
+            if let Some(action) = _tray.poll() {
+                match action {
+                    TrayAction::ToggleVisibility => {
+                        self.toggle_visibility(ctx);
+                    }
+                    TrayAction::ToggleMode => {
+                        self.toggle_mode(ctx);
+                    }
+                    TrayAction::OpenSettings => {
+                        // Ensure the overlay is visible so the user can see settings
+                        if !self.visible {
+                            self.visible = true;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                            self.sync_tray_labels();
+                        }
+                        self.show_settings = true;
+                    }
+                    TrayAction::Quit => {
+                        let _ = self.config.save();
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
                 }
             }
         }
@@ -119,9 +171,11 @@ impl eframe::App for PacecarApp {
                             self.config.overlay_mode = OverlayMode::ClickThrough;
                             overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
                             let _ = self.config.save();
+                            self.sync_tray_labels();
                             ui_ctx.close_menu();
                         }
                         if ui_ctx.button("Quit").clicked() {
+                            let _ = self.config.save();
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                             ui_ctx.close_menu();
                         }
@@ -146,6 +200,7 @@ impl eframe::App for PacecarApp {
             }
             // Re-apply overlay mode in case settings changed it
             overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
+            self.sync_tray_labels();
         }
 
         // Persist window position when it changes
@@ -157,6 +212,20 @@ impl eframe::App for PacecarApp {
                     self.last_saved_position = Some(pos);
                     let _ = self.config.save();
                 }
+            }
+        }
+
+        // Handle window close: hide to tray instead of quitting (when tray is available)
+        if ctx.input(|i| i.viewport().close_requested()) {
+            if self.tray_manager.is_some() {
+                // Cancel the close and hide to tray instead
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.visible = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                self.sync_tray_labels();
+            } else {
+                // No tray — allow the close (save config first)
+                let _ = self.config.save();
             }
         }
 
