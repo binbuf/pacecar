@@ -32,7 +32,7 @@ pub fn show_settings(ctx: &egui::Context, config: &mut Config) -> bool {
 
             egui::CentralPanel::default()
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(egui::Color32::from_rgb(24, 24, 28))
                         .inner_margin(20.0),
                 )
@@ -179,7 +179,7 @@ pub fn show_settings(ctx: &egui::Context, config: &mut Config) -> bool {
                             egui::RichText::new("Reset to Defaults").color(egui::Color32::from_rgb(200, 200, 200)),
                         )
                         .fill(egui::Color32::from_rgb(55, 55, 60))
-                        .rounding(6.0)
+                        .corner_radius(6.0)
                         .min_size(egui::vec2(160.0, 32.0));
 
                         if ui.add(btn).clicked() {
@@ -213,10 +213,10 @@ fn settings_section(
 ) -> bool {
     let mut changed = false;
 
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(egui::Color32::from_rgb(32, 32, 36))
-        .rounding(8.0)
-        .inner_margin(egui::Margin::symmetric(12.0, 10.0))
+        .corner_radius(8.0)
+        .inner_margin(egui::Margin::symmetric(12, 10))
         .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(50, 50, 55)))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());

@@ -259,7 +259,7 @@ pub fn configure_visuals(ctx: &egui::Context) {
     // Compact spacing
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = egui::vec2(4.0, 4.0);
-    style.spacing.window_margin = egui::Margin::same(6.0);
+    style.spacing.window_margin = egui::Margin::same(6);
     style.visuals = visuals;
     ctx.set_style(style);
 }

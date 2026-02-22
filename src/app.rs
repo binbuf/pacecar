@@ -45,6 +45,11 @@ pub struct PacecarApp {
     /// issue `ViewportCommand::Close` when it reaches 0. This gives the GPU
     /// driver a frame or two to flush pending commands before surface destruction.
     close_countdown: u8,
+    /// Whether the background wakeup thread has been spawned.
+    wakeup_spawned: bool,
+    /// Last overlay mode applied to the viewport, used to avoid sending
+    /// redundant MousePassthrough commands every frame.
+    last_applied_mode: OverlayMode,
 }
 
 impl PacecarApp {
@@ -55,6 +60,7 @@ impl PacecarApp {
         tray_manager: Option<TrayManager>,
         specs_receiver: mpsc::Receiver<SystemSpecs>,
     ) -> Self {
+        let initial_mode = config.overlay_mode;
         Self {
             last_saved_position: config.window_position,
             last_saved_size: config.window_size,
@@ -71,6 +77,8 @@ impl PacecarApp {
             visible: true,
             quit_requested: false,
             close_countdown: 0,
+            wakeup_spawned: false,
+            last_applied_mode: initial_mode,
         }
     }
 
@@ -111,6 +119,21 @@ impl eframe::App for PacecarApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Spawn a background thread that periodically wakes the event loop.
+        // This guarantees update() is called even when the window is hidden,
+        // so tray and hotkey events are always processed promptly.
+        if !self.wakeup_spawned {
+            self.wakeup_spawned = true;
+            let ctx_clone = ctx.clone();
+            std::thread::Builder::new()
+                .name("wakeup".into())
+                .spawn(move || loop {
+                    std::thread::sleep(Duration::from_millis(100));
+                    ctx_clone.request_repaint();
+                })
+                .ok();
+        }
+
         // Two-phase close: count down frames before issuing Close to let the
         // GPU driver flush pending commands before surface destruction.
         if self.close_countdown > 0 {
@@ -193,18 +216,17 @@ impl eframe::App for PacecarApp {
             }
         }
 
-        // Ensure always-on-top is maintained
-        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
-            egui::WindowLevel::AlwaysOnTop,
-        ));
-
-        // Apply current overlay mode
-        overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
+        // Re-apply overlay mode only when it actually changes (sending
+        // MousePassthrough every frame steals focus from tray popups).
+        if self.config.overlay_mode != self.last_applied_mode {
+            self.last_applied_mode = self.config.overlay_mode;
+            overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
+        }
 
         let bg = overlay::background_color(self.config.transparency);
-        let panel_frame = egui::Frame::none()
+        let panel_frame = egui::Frame::NONE
             .fill(bg)
-            .rounding(8.0)
+            .corner_radius(8.0)
             .inner_margin(8.0);
 
         egui::CentralPanel::default()
@@ -226,21 +248,21 @@ impl eframe::App for PacecarApp {
                         context_menu_open = true;
                         if ui_ctx.button("Settings").clicked() {
                             self.show_settings = true;
-                            ui_ctx.close_menu();
+                            ui_ctx.close();
                         }
                         if ui_ctx.button("Click-through mode").clicked() {
                             self.config.overlay_mode = OverlayMode::ClickThrough;
                             overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
                             let _ = self.config.save();
                             self.sync_tray_labels();
-                            ui_ctx.close_menu();
+                            ui_ctx.close();
                         }
                         if ui_ctx.button("Quit").clicked() {
                             self.quit_requested = true;
                             let _ = self.config.save();
                             self.close_countdown = 2;
                             ctx.request_repaint();
-                            ui_ctx.close_menu();
+                            ui_ctx.close();
                         }
                     });
 
@@ -287,8 +309,11 @@ impl eframe::App for PacecarApp {
             if !ui::settings::show_settings(ctx, &mut self.config) {
                 self.show_settings = false;
             }
-            // Re-apply overlay mode in case settings changed it
-            overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
+            // Re-apply overlay mode only if settings changed it
+            if self.config.overlay_mode != self.last_applied_mode {
+                self.last_applied_mode = self.config.overlay_mode;
+                overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
+            }
             self.sync_tray_labels();
         }
 
@@ -333,7 +358,9 @@ impl eframe::App for PacecarApp {
             }
         }
 
-        // Schedule next repaint to match polling interval (avoid burning CPU)
-        ctx.request_repaint_after(Duration::from_millis(self.config.polling_interval_ms));
+        // Schedule next repaint at a fast cadence so tray/hotkey events are
+        // processed promptly (~100ms latency). The metrics collector runs on its
+        // own background thread, so this interval is independent of polling_interval_ms.
+        ctx.request_repaint_after(Duration::from_millis(100));
     }
 }

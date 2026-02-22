@@ -128,9 +128,9 @@ impl<'a> Widget for MetricPanel<'a> {
         let compact = self.panel_width < COMPACT_THRESHOLD;
         let inner_margin = if compact { 4.0 } else { (self.panel_width * 0.07).clamp(6.0, 10.0) };
 
-        let panel_frame = egui::Frame::none()
+        let panel_frame = egui::Frame::NONE
             .fill(Color32::from_rgba_unmultiplied(34, 34, 40, 210))
-            .rounding(if compact { 4.0 } else { 8.0 })
+            .corner_radius(if compact { 4.0 } else { 8.0 })
             .inner_margin(inner_margin)
             .stroke(egui::Stroke::new(1.0, self.color.linear_multiply(0.3)));
 

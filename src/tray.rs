@@ -1,5 +1,7 @@
 // System tray icon, menu, events
 
+use crossbeam_channel::Receiver;
+
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
@@ -21,6 +23,10 @@ pub struct TrayManager {
     mode_item: MenuItem,
     settings_item: MenuItem,
     quit_item: MenuItem,
+    /// Cached receiver for tray icon events (double-click, etc.)
+    tray_receiver: &'static Receiver<TrayIconEvent>,
+    /// Cached receiver for menu item click events
+    menu_receiver: &'static Receiver<MenuEvent>,
 }
 
 impl TrayManager {
@@ -52,12 +58,18 @@ impl TrayManager {
             .build()
             .map_err(|e| format!("failed to build tray icon: {e}"))?;
 
+        // Cache the static receivers once so poll() doesn't call the accessor each frame
+        let tray_receiver = TrayIconEvent::receiver();
+        let menu_receiver = MenuEvent::receiver();
+
         Ok(Self {
             _tray: tray,
             show_hide_item,
             mode_item,
             settings_item,
             quit_item,
+            tray_receiver,
+            menu_receiver,
         })
     }
 
@@ -68,14 +80,14 @@ impl TrayManager {
         let mut action: Option<TrayAction> = None;
 
         // Drain all pending tray icon events
-        while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+        while let Ok(event) = self.tray_receiver.try_recv() {
             if matches!(event, TrayIconEvent::DoubleClick { .. }) {
                 action = Some(TrayAction::ToggleVisibility);
             }
         }
 
         // Drain all pending menu events
-        while let Ok(event) = MenuEvent::receiver().try_recv() {
+        while let Ok(event) = self.menu_receiver.try_recv() {
             let id = event.id();
             let new_action = if id == self.quit_item.id() {
                 Some(TrayAction::Quit)
