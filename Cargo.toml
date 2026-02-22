@@ -1,0 +1,28 @@
+[package]
+name = "pacecar"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+nvidia = ["dep:nvml-wrapper"]
+
+[dependencies]
+eframe = "0.29"
+sysinfo = "0.32"
+tray-icon = "0.19"
+global-hotkey = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+directories = "5"
+nvml-wrapper = { version = "0.10", optional = true }
+
+[dev-dependencies]
+mockall = "0.13"
+insta = "1"
+proptest = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
