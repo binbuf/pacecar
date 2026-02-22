@@ -5,6 +5,7 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::config::{Config, OverlayMode, Position};
+use crate::hotkey::{HotkeyAction, HotkeyManager};
 use crate::metrics::{MetricsReceiver, MetricsSnapshot};
 use crate::overlay;
 use crate::ui;
@@ -20,10 +21,18 @@ pub struct PacecarApp {
     visuals_configured: bool,
     /// Whether the settings overlay is open.
     show_settings: bool,
+    /// Global hotkey manager (None if registration failed).
+    hotkey_manager: Option<HotkeyManager>,
+    /// Whether the overlay is currently visible.
+    visible: bool,
 }
 
 impl PacecarApp {
-    pub fn new(config: Config, receiver: MetricsReceiver) -> Self {
+    pub fn new(
+        config: Config,
+        receiver: MetricsReceiver,
+        hotkey_manager: Option<HotkeyManager>,
+    ) -> Self {
         Self {
             last_saved_position: config.window_position,
             config,
@@ -31,6 +40,8 @@ impl PacecarApp {
             snapshot: None,
             visuals_configured: false,
             show_settings: false,
+            hotkey_manager,
+            visible: true,
         }
     }
 }
@@ -51,6 +62,22 @@ impl eframe::App for PacecarApp {
         // Receive latest metrics (non-blocking)
         if let Some(snap) = self.receiver.latest() {
             self.snapshot = Some(snap);
+        }
+
+        // Poll for global hotkey events
+        if let Some(ref hk) = self.hotkey_manager {
+            if let Some(HotkeyAction::ToggleOverlay) = hk.poll() {
+                self.visible = !self.visible;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(self.visible));
+
+                // If becoming visible while in click-through mode, switch back to interactive
+                // so the user can actually interact with the overlay
+                if self.visible && self.config.overlay_mode == OverlayMode::ClickThrough {
+                    self.config.overlay_mode = OverlayMode::Interactive;
+                    overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
+                    let _ = self.config.save();
+                }
+            }
         }
 
         // Ensure always-on-top is maintained
