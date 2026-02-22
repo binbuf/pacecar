@@ -149,10 +149,30 @@ impl<'a> Widget for MetricPanel<'a> {
 
         panel_frame
             .show(ui, |ui| {
-                ui.set_min_width(MIN_PANEL_WIDTH);
+                // Claim full allocated column width so tiles don't shift
+                ui.set_width((self.panel_width - inner_margin * 2.0).max(MIN_PANEL_WIDTH));
+
+                // Set minimum height to prevent height jitter
+                let vis_branch = self.vis_branch();
+                let min_height = match vis_branch {
+                    VisBranch::TextOnly => {
+                        // label + primary + secondary + spacing
+                        label_size + primary_size + secondary_size + 16.0
+                    }
+                    VisBranch::Gauge => {
+                        // gauge + spacing + label + primary + secondary
+                        gauge_size + label_size + primary_size + secondary_size + 20.0
+                    }
+                    VisBranch::Sparkline => {
+                        // sparkline + spacing + label + primary + secondary
+                        sparkline_size.y + label_size + primary_size + secondary_size + 20.0
+                    }
+                };
+                ui.set_min_height(min_height);
+
                 ui.vertical(|ui| {
                     // Visualization widget
-                    match self.vis_branch() {
+                    match vis_branch {
                         VisBranch::Gauge => {
                             let value = self.gauge_value.unwrap_or(0.0) / 100.0;
                             ui.add(Gauge::new(
@@ -188,32 +208,32 @@ impl<'a> Widget for MetricPanel<'a> {
                             .strong(),
                     );
 
-                    // Primary value (large monospace)
-                    ui.label(
+                    // Primary value (large monospace, wrapping)
+                    ui.add(egui::Label::new(
                         egui::RichText::new(self.primary_value)
                             .color(Color32::WHITE)
                             .size(primary_size)
                             .monospace(),
-                    );
+                    ).wrap());
 
-                    // Secondary value (small, dimmed)
+                    // Secondary value (small, dimmed, wrapping)
                     if let Some(secondary) = self.secondary_value {
-                        ui.label(
+                        ui.add(egui::Label::new(
                             egui::RichText::new(secondary)
                                 .color(Color32::from_gray(180))
                                 .size(secondary_size)
                                 .monospace(),
-                        );
+                        ).wrap());
                     }
 
-                    // Tertiary value (small, dimmed)
+                    // Tertiary value (small, dimmed, wrapping)
                     if let Some(tertiary) = self.tertiary_value {
-                        ui.label(
+                        ui.add(egui::Label::new(
                             egui::RichText::new(tertiary)
                                 .color(Color32::from_gray(160))
                                 .size(secondary_size)
                                 .monospace(),
-                        );
+                        ).wrap());
                     }
                 });
             })
@@ -236,7 +256,7 @@ mod tests {
 
     #[test]
     fn gauge_mode_without_gauge_value_selects_text_only() {
-        let panel = MetricPanel::new("Network", "\u{2191} 1.2 MB/s", Color32::YELLOW)
+        let panel = MetricPanel::new("Network", "1.2 MB/s", Color32::YELLOW)
             .panel_width(140.0)
             .visualization(Visualization::Gauges);
         assert_eq!(panel.vis_branch(), VisBranch::TextOnly);
@@ -264,7 +284,7 @@ mod tests {
 
     #[test]
     fn sparkline_mode_no_history_no_gauge_selects_text_only() {
-        let panel = MetricPanel::new("Network", "\u{2191} 1.2 MB/s", Color32::YELLOW)
+        let panel = MetricPanel::new("Network", "1.2 MB/s", Color32::YELLOW)
             .panel_width(140.0)
             .visualization(Visualization::Sparklines);
         assert_eq!(panel.vis_branch(), VisBranch::TextOnly);
@@ -311,16 +331,16 @@ mod tests {
 
     #[test]
     fn snapshot_network_text_panel() {
-        let panel = MetricPanel::new("Network", "\u{2191} 1.1 MB/s", Color32::from_rgb(255, 165, 0))
-            .secondary_value("\u{2193} 11.4 MB/s")
+        let panel = MetricPanel::new("Network", "12.5 MB/s", Color32::from_rgb(255, 165, 0))
+            .secondary_value("\u{2191} 1.1  \u{2193} 11.4")
             .visualization(Visualization::Gauges);
         insta::assert_debug_snapshot!("network_text_panel", panel_snapshot(&panel));
     }
 
     #[test]
     fn snapshot_disk_text_panel() {
-        let panel = MetricPanel::new("Disk I/O", "R: 42.9 MB/s", Color32::from_rgb(180, 130, 230))
-            .secondary_value("W: 11.4 MB/s")
+        let panel = MetricPanel::new("Disk I/O", "54.3 MB/s", Color32::from_rgb(180, 130, 230))
+            .secondary_value("R: 42.9  W: 11.4")
             .visualization(Visualization::Gauges);
         insta::assert_debug_snapshot!("disk_text_panel", panel_snapshot(&panel));
     }

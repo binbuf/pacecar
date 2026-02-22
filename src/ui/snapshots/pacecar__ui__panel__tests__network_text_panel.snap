@@ -4,9 +4,9 @@ expression: panel_snapshot(&panel)
 ---
 PanelSnapshot {
     label: "Network",
-    primary_value: "↑ 1.1 MB/s",
+    primary_value: "12.5 MB/s",
     secondary_value: Some(
-        "↓ 11.4 MB/s",
+        "↑ 1.1  ↓ 11.4",
     ),
     tertiary_value: None,
     vis_branch: TextOnly,

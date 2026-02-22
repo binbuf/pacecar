@@ -4,9 +4,9 @@ expression: panel_snapshot(&panel)
 ---
 PanelSnapshot {
     label: "Disk I/O",
-    primary_value: "R: 42.9 MB/s",
+    primary_value: "54.3 MB/s",
     secondary_value: Some(
-        "W: 11.4 MB/s",
+        "R: 42.9  W: 11.4",
     ),
     tertiary_value: None,
     vis_branch: TextOnly,

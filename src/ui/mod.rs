@@ -94,6 +94,16 @@ pub(crate) fn format_bytes_per_sec(bytes: u64) -> String {
     }
 }
 
+/// Format bytes/sec as a compact number without units (e.g., "1.1" or "42.9").
+/// Uses the same KB/MB threshold as `format_bytes_per_sec`.
+pub(crate) fn format_bytes_per_sec_compact(bytes: u64) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1}", bytes as f64 / 1_048_576.0)
+    } else {
+        format!("{:.0}", bytes as f64 / 1_024.0)
+    }
+}
+
 /// Render the full metrics grid layout.
 pub fn render_layout(
     ui: &mut egui::Ui,
@@ -130,15 +140,21 @@ pub fn render_layout(
         gpu_tertiary = None;
     }
 
-    let up = format_bytes_per_sec(snapshot.network.upload_bytes_per_sec);
-    let down = format_bytes_per_sec(snapshot.network.download_bytes_per_sec);
-    let net_primary = format!("\u{2191} {up}");
-    let net_secondary = format!("\u{2193} {down}");
+    let net_total = snapshot.network.upload_bytes_per_sec + snapshot.network.download_bytes_per_sec;
+    let net_primary = format_bytes_per_sec(net_total);
+    let net_secondary = format!(
+        "\u{2191} {}  \u{2193} {}",
+        format_bytes_per_sec_compact(snapshot.network.upload_bytes_per_sec),
+        format_bytes_per_sec_compact(snapshot.network.download_bytes_per_sec),
+    );
 
-    let read = format_bytes_per_sec(snapshot.disk.read_bytes_per_sec);
-    let write = format_bytes_per_sec(snapshot.disk.write_bytes_per_sec);
-    let disk_primary = format!("R: {read}");
-    let disk_secondary = format!("W: {write}");
+    let disk_total = snapshot.disk.read_bytes_per_sec + snapshot.disk.write_bytes_per_sec;
+    let disk_primary = format_bytes_per_sec(disk_total);
+    let disk_secondary = format!(
+        "R: {}  W: {}",
+        format_bytes_per_sec_compact(snapshot.disk.read_bytes_per_sec),
+        format_bytes_per_sec_compact(snapshot.disk.write_bytes_per_sec),
+    );
 
     let mut panels_added = 0usize;
 
@@ -324,5 +340,20 @@ mod tests {
     #[test]
     fn format_bytes_per_sec_zero() {
         assert_eq!(format_bytes_per_sec(0), "0 KB/s");
+    }
+
+    #[test]
+    fn format_bytes_per_sec_compact_kilobytes() {
+        assert_eq!(format_bytes_per_sec_compact(512_000), "500");
+    }
+
+    #[test]
+    fn format_bytes_per_sec_compact_megabytes() {
+        assert_eq!(format_bytes_per_sec_compact(10_485_760), "10.0");
+    }
+
+    #[test]
+    fn format_bytes_per_sec_compact_zero() {
+        assert_eq!(format_bytes_per_sec_compact(0), "0");
     }
 }
