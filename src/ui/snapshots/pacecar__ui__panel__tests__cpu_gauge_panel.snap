@@ -1,0 +1,18 @@
+---
+source: src/ui/panel.rs
+assertion_line: 226
+expression: panel_snapshot(&panel)
+---
+PanelSnapshot {
+    label: "CPU",
+    primary_value: "42%",
+    secondary_value: Some(
+        "3.8 GHz",
+    ),
+    vis_branch: Gauge,
+    color_rgb: (
+        100,
+        149,
+        237,
+    ),
+}

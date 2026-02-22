@@ -1,0 +1,18 @@
+---
+source: src/ui/panel.rs
+assertion_line: 254
+expression: panel_snapshot(&panel)
+---
+PanelSnapshot {
+    label: "Network",
+    primary_value: "↑ 1.1 MB/s",
+    secondary_value: Some(
+        "↓ 11.4 MB/s",
+    ),
+    vis_branch: TextOnly,
+    color_rgb: (
+        255,
+        165,
+        0,
+    ),
+}

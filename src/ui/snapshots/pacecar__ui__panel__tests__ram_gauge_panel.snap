@@ -1,0 +1,18 @@
+---
+source: src/ui/panel.rs
+assertion_line: 235
+expression: panel_snapshot(&panel)
+---
+PanelSnapshot {
+    label: "RAM",
+    primary_value: "50%",
+    secondary_value: Some(
+        "7.5/16 GB",
+    ),
+    vis_branch: Gauge,
+    color_rgb: (
+        80,
+        200,
+        120,
+    ),
+}
