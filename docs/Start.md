@@ -1,0 +1,2 @@
+Let's design a Rust egui app called Pacecar. It will be used like the task manager's performance tab (CPU, memory, GPU, Network activity, I/O acitivty, RAM performance, etc). We want a lot of key metrics all in one tiny small dashboard. The app should also have as low memory footprint as possible. The GUI should be an overlay, look really modern. There should be a system tray the app minimizes or closes to and then the app can close from there. The app should be cross platform but MVP is targeting Windows 11.
+
