@@ -1,4 +1,4 @@
-# 🏎️ Pacecar
+# Pacecar
 
 **Pacecar** is a lightweight, always-on-top system performance overlay built with **Rust** and **egui**. It provides real-time CPU, RAM, GPU, network, and disk I/O metrics in a compact, modern dashboard—similar to Windows Task Manager's Performance tab but as a floating overlay.
 
@@ -6,7 +6,7 @@ Designed for minimal overhead and a polished aesthetic, Pacecar aims to keep you
 
 ## ✨ Features
 
-- **Real-time Metrics**: Monitor CPU usage (total/per-core), RAM, GPU (NVIDIA support), Network speeds, and Disk I/O.
+- **Real-time Metrics**: Monitor CPU usage (total/per-core), RAM, GPU (NVIDIA, AMD, & Intel support), Network speeds, and Disk I/O.
 - **Modern UI**: Clean, compact grid layout using circular gauges or sparklines.
 - **Always-on-Top**: Keep the dashboard visible while gaming or working.
 - **Overlay Modes**:
@@ -27,7 +27,7 @@ Designed for minimal overhead and a polished aesthetic, Pacecar aims to keep you
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/user/pacecar.git
+   git clone https://github.com/binbuf/pacecar.git
    cd pacecar
    ```
 
@@ -39,15 +39,14 @@ Designed for minimal overhead and a polished aesthetic, Pacecar aims to keep you
 3. **Build and run for production**:
    For the best performance and lowest memory footprint, use the release profile:
    ```bash
-   cargo run --release
+   cargo run --release --features nvidia
    ```
 
-### Features (Optional)
+### Features 
 
-To enable NVIDIA GPU monitoring (requires NVML):
-```bash
-cargo run --release --features nvidia
-```
+`--features nvidia` is required as NVIDIA locks their GPU telemetry behind a proprietary library (NVML) that ships with their driver. There's no way to query NVIDIA GPU usage, temperature, or VRAM through standard Windows APIs. They deliberately don't expose that data through D3DKMT's statistics interfaces.
+
+AMD and Intel GPUs play nicely with the Windows kernel's built-in GPU management layer (D3DKMT/WDDM), so their usage and VRAM stats are available through the same OS-level API that Task Manager uses. No vendor-specific SDK needed.
 
 ## 🛠️ Development
 
