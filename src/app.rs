@@ -18,6 +18,8 @@ pub struct PacecarApp {
     last_saved_position: Option<Position>,
     /// Whether visuals have been configured.
     visuals_configured: bool,
+    /// Whether the settings overlay is open.
+    show_settings: bool,
 }
 
 impl PacecarApp {
@@ -28,6 +30,7 @@ impl PacecarApp {
             receiver,
             snapshot: None,
             visuals_configured: false,
+            show_settings: false,
         }
     }
 }
@@ -81,6 +84,10 @@ impl eframe::App for PacecarApp {
 
                     // Right-click context menu
                     response.context_menu(|ui_ctx: &mut egui::Ui| {
+                        if ui_ctx.button("Settings").clicked() {
+                            self.show_settings = true;
+                            ui_ctx.close_menu();
+                        }
                         if ui_ctx.button("Click-through mode").clicked() {
                             self.config.overlay_mode = OverlayMode::ClickThrough;
                             overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
@@ -104,6 +111,15 @@ impl eframe::App for PacecarApp {
                     );
                 }
             });
+
+        // Settings overlay
+        if self.show_settings {
+            if !ui::settings::show_settings(ctx, &mut self.config) {
+                self.show_settings = false;
+            }
+            // Re-apply overlay mode in case settings changed it
+            overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
+        }
 
         // Persist window position when it changes
         if self.config.overlay_mode == OverlayMode::Interactive {
