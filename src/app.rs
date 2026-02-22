@@ -1,5 +1,6 @@
 // egui App impl, main render loop
 
+use std::sync::mpsc;
 use std::time::Duration;
 
 use eframe::egui;
@@ -8,6 +9,7 @@ use crate::config::{Config, OverlayMode, Position, Size};
 use crate::hotkey::{HotkeyAction, HotkeyManager};
 use crate::metrics::{MetricsReceiver, MetricsSnapshot};
 use crate::overlay;
+use crate::specs::SystemSpecs;
 use crate::tray::{TrayAction, TrayManager};
 use crate::ui;
 
@@ -28,6 +30,12 @@ pub struct PacecarApp {
     hotkey_manager: Option<HotkeyManager>,
     /// System tray manager (None if tray creation failed).
     tray_manager: Option<TrayManager>,
+    /// Whether the specs view is open.
+    show_specs: bool,
+    /// Cached hardware specs (populated once from background thread).
+    specs: Option<SystemSpecs>,
+    /// Receiver for the one-shot specs collection result.
+    specs_receiver: Option<mpsc::Receiver<SystemSpecs>>,
     /// Whether the overlay is currently visible.
     visible: bool,
     /// Set to true when the user requests a full quit (tray Quit or context menu Quit).
@@ -45,6 +53,7 @@ impl PacecarApp {
         receiver: MetricsReceiver,
         hotkey_manager: Option<HotkeyManager>,
         tray_manager: Option<TrayManager>,
+        specs_receiver: mpsc::Receiver<SystemSpecs>,
     ) -> Self {
         Self {
             last_saved_position: config.window_position,
@@ -54,6 +63,9 @@ impl PacecarApp {
             snapshot: None,
             visuals_configured: false,
             show_settings: false,
+            show_specs: false,
+            specs: None,
+            specs_receiver: Some(specs_receiver),
             hotkey_manager,
             tray_manager,
             visible: true,
@@ -133,6 +145,14 @@ impl eframe::App for PacecarApp {
             self.snapshot = Some(snap);
         }
 
+        // Poll for specs result (one-shot)
+        if let Some(ref rx) = self.specs_receiver {
+            if let Ok(specs) = rx.try_recv() {
+                self.specs = Some(specs);
+                self.specs_receiver = None;
+            }
+        }
+
         // Poll for global hotkey events
         if let Some(ref hk) = self.hotkey_manager {
             if let Some(HotkeyAction::ToggleOverlay) = hk.poll() {
@@ -200,12 +220,10 @@ impl eframe::App for PacecarApp {
                         egui::Sense::click_and_drag(),
                     );
 
-                    if response.drag_started_by(egui::PointerButton::Primary) {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
-                    }
-
-                    // Right-click context menu
+                    // Right-click context menu (must come before drag to avoid swallowing clicks)
+                    let mut context_menu_open = false;
                     response.context_menu(|ui_ctx: &mut egui::Ui| {
+                        context_menu_open = true;
                         if ui_ctx.button("Settings").clicked() {
                             self.show_settings = true;
                             ui_ctx.close_menu();
@@ -225,17 +243,36 @@ impl eframe::App for PacecarApp {
                             ui_ctx.close_menu();
                         }
                     });
+
+                    if response.drag_started_by(egui::PointerButton::Primary) && !context_menu_open {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                    }
                 }
 
-                // Header bar with gear button
-                if self.config.overlay_mode == OverlayMode::Interactive
-                    && ui::render_header(ui_ctx)
-                {
-                    self.show_settings = true;
+                // Header bar with gear and specs buttons
+                if self.config.overlay_mode == OverlayMode::Interactive {
+                    match ui::render_header(ui_ctx) {
+                        ui::HeaderAction::OpenSettings => {
+                            self.show_settings = true;
+                        }
+                        ui::HeaderAction::OpenSpecs => {
+                            self.show_specs = !self.show_specs;
+                        }
+                        ui::HeaderAction::None => {}
+                    }
                 }
 
-                // Render metric panels or placeholder
-                if let Some(snapshot) = &self.snapshot {
+                // Render specs view or metric panels
+                if self.show_specs {
+                    if let Some(ref specs) = self.specs {
+                        ui::specs::render_specs(ui_ctx, specs);
+                    } else {
+                        ui_ctx.colored_label(
+                            egui::Color32::from_gray(150),
+                            "Loading specs\u{2026}",
+                        );
+                    }
+                } else if let Some(snapshot) = &self.snapshot {
                     ui::render_layout(ui_ctx, snapshot, self.config.visualization);
                 } else {
                     ui_ctx.colored_label(

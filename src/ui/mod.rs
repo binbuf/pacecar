@@ -4,6 +4,7 @@ pub mod gauge;
 pub mod panel;
 pub mod settings;
 pub mod sparkline;
+pub mod specs;
 
 use eframe::egui;
 
@@ -21,10 +22,16 @@ impl MetricColors {
     pub const DISK: egui::Color32 = egui::Color32::from_rgb(180, 140, 240); // Lavender purple
 }
 
-/// Render the header bar with app name and gear button.
-/// Returns `true` if the gear button was clicked.
-pub fn render_header(ui: &mut egui::Ui) -> bool {
-    let mut gear_clicked = false;
+/// Action returned by the header bar.
+pub enum HeaderAction {
+    None,
+    OpenSettings,
+    OpenSpecs,
+}
+
+/// Render the header bar with app name, specs button, and gear button.
+pub fn render_header(ui: &mut egui::Ui) -> HeaderAction {
+    let mut action = HeaderAction::None;
 
     ui.horizontal(|ui| {
         ui.label(
@@ -44,7 +51,19 @@ pub fn render_header(ui: &mut egui::Ui) -> bool {
                 .frame(false),
             );
             if gear_btn.clicked() {
-                gear_clicked = true;
+                action = HeaderAction::OpenSettings;
+            }
+
+            let specs_btn = ui.add(
+                egui::Button::new(
+                    egui::RichText::new("\u{2139}")
+                        .size(14.0)
+                        .color(egui::Color32::from_rgb(150, 150, 170)),
+                )
+                .frame(false),
+            );
+            if specs_btn.clicked() {
+                action = HeaderAction::OpenSpecs;
             }
         });
     });
@@ -63,7 +82,7 @@ pub fn render_header(ui: &mut egui::Ui) -> bool {
     );
     ui.add_space(4.0);
 
-    gear_clicked
+    action
 }
 
 /// Calculate the number of columns based on available width.
@@ -98,9 +117,9 @@ pub(crate) fn format_bytes_per_sec(bytes: u64) -> String {
 /// Uses the same KB/MB threshold as `format_bytes_per_sec`.
 pub(crate) fn format_bytes_per_sec_compact(bytes: u64) -> String {
     if bytes >= 1_048_576 {
-        format!("{:.1}", bytes as f64 / 1_048_576.0)
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
     } else {
-        format!("{:.0}", bytes as f64 / 1_024.0)
+        format!("{:.0} KB", bytes as f64 / 1_024.0)
     }
 }
 
@@ -344,16 +363,16 @@ mod tests {
 
     #[test]
     fn format_bytes_per_sec_compact_kilobytes() {
-        assert_eq!(format_bytes_per_sec_compact(512_000), "500");
+        assert_eq!(format_bytes_per_sec_compact(512_000), "500 KB");
     }
 
     #[test]
     fn format_bytes_per_sec_compact_megabytes() {
-        assert_eq!(format_bytes_per_sec_compact(10_485_760), "10.0");
+        assert_eq!(format_bytes_per_sec_compact(10_485_760), "10.0 MB");
     }
 
     #[test]
     fn format_bytes_per_sec_compact_zero() {
-        assert_eq!(format_bytes_per_sec_compact(0), "0");
+        assert_eq!(format_bytes_per_sec_compact(0), "0 KB");
     }
 }

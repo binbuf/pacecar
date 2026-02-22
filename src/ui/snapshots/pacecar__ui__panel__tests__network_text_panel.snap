@@ -6,7 +6,7 @@ PanelSnapshot {
     label: "Network",
     primary_value: "12.5 MB/s",
     secondary_value: Some(
-        "↑ 1.1  ↓ 11.4",
+        "↑ 1.1 MB  ↓ 11.4 MB",
     ),
     tertiary_value: None,
     vis_branch: TextOnly,

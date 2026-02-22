@@ -6,6 +6,7 @@ use pacecar::hotkey::HotkeyManager;
 use pacecar::icon;
 use pacecar::metrics::{SystemCollector, spawn_collector};
 use pacecar::overlay;
+use pacecar::specs;
 use pacecar::tray::TrayManager;
 
 use std::time::Duration;
@@ -52,6 +53,8 @@ fn main() -> eframe::Result {
         }
     };
 
+    let specs_receiver = specs::spawn_specs_collector();
+
     let result = eframe::run_native(
         "Pacecar",
         options,
@@ -61,6 +64,7 @@ fn main() -> eframe::Result {
                 receiver,
                 hotkey_manager,
                 tray_manager,
+                specs_receiver,
             )))
         }),
     );

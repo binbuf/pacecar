@@ -6,7 +6,7 @@ PanelSnapshot {
     label: "Disk I/O",
     primary_value: "54.3 MB/s",
     secondary_value: Some(
-        "R: 42.9  W: 11.4",
+        "R: 42.9 MB  W: 11.4 MB",
     ),
     tertiary_value: None,
     vis_branch: TextOnly,

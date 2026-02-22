@@ -7,5 +7,6 @@ pub mod hotkey;
 pub mod icon;
 pub mod metrics;
 pub mod overlay;
+pub mod specs;
 pub mod tray;
 pub mod ui;

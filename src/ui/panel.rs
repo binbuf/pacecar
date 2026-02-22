@@ -332,7 +332,7 @@ mod tests {
     #[test]
     fn snapshot_network_text_panel() {
         let panel = MetricPanel::new("Network", "12.5 MB/s", Color32::from_rgb(255, 165, 0))
-            .secondary_value("\u{2191} 1.1  \u{2193} 11.4")
+            .secondary_value("\u{2191} 1.1 MB  \u{2193} 11.4 MB")
             .visualization(Visualization::Gauges);
         insta::assert_debug_snapshot!("network_text_panel", panel_snapshot(&panel));
     }
@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn snapshot_disk_text_panel() {
         let panel = MetricPanel::new("Disk I/O", "54.3 MB/s", Color32::from_rgb(180, 130, 230))
-            .secondary_value("R: 42.9  W: 11.4")
+            .secondary_value("R: 42.9 MB  W: 11.4 MB")
             .visualization(Visualization::Gauges);
         insta::assert_debug_snapshot!("disk_text_panel", panel_snapshot(&panel));
     }
