@@ -7,12 +7,11 @@ use crate::config::Visualization;
 use super::gauge::Gauge;
 use super::sparkline::Sparkline;
 
-/// Gauge diameter in pixels.
-const GAUGE_SIZE: f32 = 60.0;
-/// Sparkline widget dimensions.
-const SPARKLINE_SIZE: Vec2 = Vec2::new(80.0, 30.0);
 /// Minimum panel width to keep grid alignment consistent.
-const MIN_PANEL_WIDTH: f32 = 80.0;
+const MIN_PANEL_WIDTH: f32 = 60.0;
+
+/// Panel width below which we switch to compact (text-only) mode.
+const COMPACT_THRESHOLD: f32 = 90.0;
 
 /// A composite metric panel combining a visualization (gauge or sparkline)
 /// with a label, primary value, and optional secondary value.
@@ -36,6 +35,8 @@ pub struct MetricPanel<'a> {
     pub color: Color32,
     /// Current visualization mode.
     pub visualization: Visualization,
+    /// Available width for this panel (used for responsive sizing).
+    pub panel_width: f32,
 }
 
 impl<'a> MetricPanel<'a> {
@@ -50,6 +51,7 @@ impl<'a> MetricPanel<'a> {
             sparkline_range: (0.0, 100.0),
             color,
             visualization: Visualization::Gauges,
+            panel_width: 140.0,
         }
     }
 
@@ -74,6 +76,11 @@ impl<'a> MetricPanel<'a> {
         self
     }
 
+    pub fn panel_width(mut self, width: f32) -> Self {
+        self.panel_width = width;
+        self
+    }
+
     pub fn visualization(mut self, vis: Visualization) -> Self {
         self.visualization = vis;
         self
@@ -81,6 +88,11 @@ impl<'a> MetricPanel<'a> {
 
     /// Determine which visualization branch this panel will render.
     pub(crate) fn vis_branch(&self) -> VisBranch {
+        // Compact mode: skip visualization when panel is too narrow
+        if self.panel_width < COMPACT_THRESHOLD {
+            return VisBranch::TextOnly;
+        }
+
         match self.visualization {
             Visualization::Gauges => {
                 if self.gauge_value.is_some() {
@@ -113,11 +125,27 @@ pub(crate) enum VisBranch {
 
 impl<'a> Widget for MetricPanel<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
+        let compact = self.panel_width < COMPACT_THRESHOLD;
+        let inner_margin = if compact { 4.0 } else { (self.panel_width * 0.07).clamp(6.0, 10.0) };
+
         let panel_frame = egui::Frame::none()
             .fill(Color32::from_rgba_unmultiplied(34, 34, 40, 210))
-            .rounding(8.0)
-            .inner_margin(10.0)
+            .rounding(if compact { 4.0 } else { 8.0 })
+            .inner_margin(inner_margin)
             .stroke(egui::Stroke::new(1.0, self.color.linear_multiply(0.3)));
+
+        // Scale sizes based on panel width
+        let usable_width = (self.panel_width - inner_margin * 2.0).max(40.0);
+        let gauge_size = (usable_width * 0.55).clamp(36.0, 80.0);
+        let sparkline_size = Vec2::new(
+            usable_width.clamp(50.0, 120.0),
+            (usable_width * 0.3).clamp(20.0, 40.0),
+        );
+
+        // Scale font sizes
+        let label_size = if compact { 9.0 } else { (self.panel_width * 0.08).clamp(9.0, 12.0) };
+        let primary_size = if compact { 12.0 } else { (self.panel_width * 0.11).clamp(12.0, 18.0) };
+        let secondary_size = if compact { 8.0 } else { (self.panel_width * 0.07).clamp(8.0, 11.0) };
 
         panel_frame
             .show(ui, |ui| {
@@ -131,7 +159,7 @@ impl<'a> Widget for MetricPanel<'a> {
                                 value,
                                 self.color,
                                 self.primary_value,
-                                GAUGE_SIZE,
+                                gauge_size,
                             ));
                         }
                         VisBranch::Sparkline => {
@@ -139,7 +167,7 @@ impl<'a> Widget for MetricPanel<'a> {
                             ui.add(Sparkline::new(
                                 history,
                                 self.color,
-                                SPARKLINE_SIZE,
+                                sparkline_size,
                                 self.sparkline_range,
                             ));
                         }
@@ -148,13 +176,15 @@ impl<'a> Widget for MetricPanel<'a> {
                         }
                     }
 
-                    ui.add_space(2.0);
+                    if !compact {
+                        ui.add_space(2.0);
+                    }
 
                     // Label
                     ui.label(
                         egui::RichText::new(self.label)
                             .color(self.color)
-                            .size(11.0)
+                            .size(label_size)
                             .strong(),
                     );
 
@@ -162,7 +192,7 @@ impl<'a> Widget for MetricPanel<'a> {
                     ui.label(
                         egui::RichText::new(self.primary_value)
                             .color(Color32::WHITE)
-                            .size(16.0)
+                            .size(primary_size)
                             .monospace(),
                     );
 
@@ -171,7 +201,7 @@ impl<'a> Widget for MetricPanel<'a> {
                         ui.label(
                             egui::RichText::new(secondary)
                                 .color(Color32::from_gray(180))
-                                .size(10.0)
+                                .size(secondary_size)
                                 .monospace(),
                         );
                     }
@@ -181,7 +211,7 @@ impl<'a> Widget for MetricPanel<'a> {
                         ui.label(
                             egui::RichText::new(tertiary)
                                 .color(Color32::from_gray(160))
-                                .size(10.0)
+                                .size(secondary_size)
                                 .monospace(),
                         );
                     }
@@ -199,6 +229,7 @@ mod tests {
     fn gauge_mode_with_gauge_value_selects_gauge() {
         let panel = MetricPanel::new("CPU", "42%", Color32::BLUE)
             .gauge_value(42.0)
+            .panel_width(140.0)
             .visualization(Visualization::Gauges);
         assert_eq!(panel.vis_branch(), VisBranch::Gauge);
     }
@@ -206,6 +237,7 @@ mod tests {
     #[test]
     fn gauge_mode_without_gauge_value_selects_text_only() {
         let panel = MetricPanel::new("Network", "\u{2191} 1.2 MB/s", Color32::YELLOW)
+            .panel_width(140.0)
             .visualization(Visualization::Gauges);
         assert_eq!(panel.vis_branch(), VisBranch::TextOnly);
     }
@@ -216,6 +248,7 @@ mod tests {
         let panel = MetricPanel::new("CPU", "42%", Color32::BLUE)
             .gauge_value(42.0)
             .sparkline(&history, (0.0, 100.0))
+            .panel_width(140.0)
             .visualization(Visualization::Sparklines);
         assert_eq!(panel.vis_branch(), VisBranch::Sparkline);
     }
@@ -224,6 +257,7 @@ mod tests {
     fn sparkline_mode_without_history_falls_back_to_gauge() {
         let panel = MetricPanel::new("CPU", "42%", Color32::BLUE)
             .gauge_value(42.0)
+            .panel_width(140.0)
             .visualization(Visualization::Sparklines);
         assert_eq!(panel.vis_branch(), VisBranch::Gauge);
     }
@@ -231,7 +265,17 @@ mod tests {
     #[test]
     fn sparkline_mode_no_history_no_gauge_selects_text_only() {
         let panel = MetricPanel::new("Network", "\u{2191} 1.2 MB/s", Color32::YELLOW)
+            .panel_width(140.0)
             .visualization(Visualization::Sparklines);
+        assert_eq!(panel.vis_branch(), VisBranch::TextOnly);
+    }
+
+    #[test]
+    fn compact_mode_forces_text_only() {
+        let panel = MetricPanel::new("CPU", "42%", Color32::BLUE)
+            .gauge_value(42.0)
+            .panel_width(80.0)
+            .visualization(Visualization::Gauges);
         assert_eq!(panel.vis_branch(), VisBranch::TextOnly);
     }
 

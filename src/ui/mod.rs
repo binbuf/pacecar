@@ -67,13 +67,22 @@ pub fn render_header(ui: &mut egui::Ui) -> bool {
 }
 
 /// Calculate the number of columns based on available width.
-/// Uses breakpoints: <250 → 2, <400 → 3, ≥400 → 3 (capped).
+/// Uses breakpoints: <130 → 1, <250 → 2, ≥250 → 3 (capped).
 pub fn column_count(available_width: f32) -> usize {
-    if available_width < 250.0 {
+    if available_width < 130.0 {
+        1
+    } else if available_width < 250.0 {
         2
     } else {
         3
     }
+}
+
+/// Calculate available width per panel given total width and column count.
+fn panel_width(available_width: f32, cols: usize) -> f32 {
+    let spacing = 8.0;
+    let total_spacing = spacing * (cols as f32 - 1.0).max(0.0);
+    (available_width - total_spacing) / cols as f32
 }
 
 /// Format bytes/sec into a human-readable string (KB/s or MB/s).
@@ -93,7 +102,9 @@ pub fn render_layout(
 ) {
     use panel::MetricPanel;
 
-    let cols = column_count(ui.available_width());
+    let available = ui.available_width();
+    let cols = column_count(available);
+    let pw = panel_width(available, cols);
 
     // Pre-format strings that outlive the grid closure.
     let cpu_primary = format!("{:.0}%", snapshot.cpu.total_usage);
@@ -140,7 +151,8 @@ pub fn render_layout(
                 MetricPanel::new("CPU", &cpu_primary, MetricColors::CPU)
                     .secondary_value(&cpu_secondary)
                     .gauge_value(snapshot.cpu.total_usage)
-                    .visualization(visualization),
+                    .visualization(visualization)
+                    .panel_width(pw),
             );
             panels_added += 1;
             if panels_added % cols == 0 { ui.end_row(); }
@@ -150,7 +162,8 @@ pub fn render_layout(
                 MetricPanel::new("RAM", &ram_primary, MetricColors::RAM)
                     .secondary_value(&ram_secondary)
                     .gauge_value(snapshot.memory.usage_percent)
-                    .visualization(visualization),
+                    .visualization(visualization)
+                    .panel_width(pw),
             );
             panels_added += 1;
             if panels_added % cols == 0 { ui.end_row(); }
@@ -162,7 +175,8 @@ pub fn render_layout(
                 let mut gpu_panel = MetricPanel::new("GPU", gp, MetricColors::GPU)
                     .secondary_value(gs)
                     .gauge_value(gpu.usage_percent)
-                    .visualization(visualization);
+                    .visualization(visualization)
+                    .panel_width(pw);
                 if let Some(ref gt) = gpu_tertiary {
                     gpu_panel = gpu_panel.tertiary_value(gt);
                 }
@@ -175,7 +189,8 @@ pub fn render_layout(
             ui.add(
                 MetricPanel::new("Network", &net_primary, MetricColors::NETWORK)
                     .secondary_value(&net_secondary)
-                    .visualization(visualization),
+                    .visualization(visualization)
+                    .panel_width(pw),
             );
             panels_added += 1;
             if panels_added % cols == 0 { ui.end_row(); }
@@ -184,7 +199,8 @@ pub fn render_layout(
             ui.add(
                 MetricPanel::new("Disk I/O", &disk_primary, MetricColors::DISK)
                     .secondary_value(&disk_secondary)
-                    .visualization(visualization),
+                    .visualization(visualization)
+                    .panel_width(pw),
             );
         });
 }
@@ -249,7 +265,14 @@ mod tests {
     }
 
     #[test]
+    fn column_count_very_narrow_window() {
+        assert_eq!(column_count(100.0), 1);
+        assert_eq!(column_count(129.0), 1);
+    }
+
+    #[test]
     fn column_count_narrow_window() {
+        assert_eq!(column_count(130.0), 2);
         assert_eq!(column_count(200.0), 2);
         assert_eq!(column_count(249.0), 2);
     }

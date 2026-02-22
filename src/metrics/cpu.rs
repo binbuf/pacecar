@@ -31,21 +31,94 @@ pub fn collect_cpu(system: &System) -> CpuMetrics {
     let cpus = system.cpus();
     let per_core_usage: Vec<f32> = cpus.iter().map(|cpu| cpu.cpu_usage()).collect();
 
-    // sysinfo reports frequency in MHz; convert to GHz.
-    // Use the average frequency across all cores (they may differ with
-    // per-core boosting). Falls back to 0.0 if no CPUs are reported.
-    let frequency_ghz = if cpus.is_empty() {
-        0.0
-    } else {
-        let total_mhz: u64 = cpus.iter().map(|cpu| cpu.frequency()).sum();
-        (total_mhz as f32) / (cpus.len() as f32) / 1000.0
-    };
+    // Try to get current (dynamic) frequency first; fall back to sysinfo's
+    // base frequency if the platform-specific call is unavailable.
+    let frequency_ghz = current_frequency_ghz(cpus.len())
+        .unwrap_or_else(|| sysinfo_frequency_ghz(cpus));
 
     CpuMetrics {
         total_usage,
         per_core_usage,
         frequency_ghz,
     }
+}
+
+/// Fallback: average frequency from sysinfo (base/rated speed on Windows).
+fn sysinfo_frequency_ghz(cpus: &[sysinfo::Cpu]) -> f32 {
+    if cpus.is_empty() {
+        0.0
+    } else {
+        let total_mhz: u64 = cpus.iter().map(|cpu| cpu.frequency()).sum();
+        (total_mhz as f32) / (cpus.len() as f32) / 1000.0
+    }
+}
+
+/// Read current (dynamic) CPU frequency via the Windows
+/// `CallNtPowerInformation` API. Returns `None` on non-Windows platforms
+/// or if the call fails.
+#[cfg(target_os = "windows")]
+fn current_frequency_ghz(num_cpus: usize) -> Option<f32> {
+    use std::mem;
+
+    #[repr(C)]
+    struct ProcessorPowerInformation {
+        _number: u32,
+        _max_mhz: u32,
+        current_mhz: u32,
+        _mhz_limit: u32,
+        _max_idle_state: u32,
+        _current_idle_state: u32,
+    }
+
+    #[link(name = "powrprof")]
+    unsafe extern "system" {
+        fn CallNtPowerInformation(
+            information_level: i32,
+            input_buffer: *const std::ffi::c_void,
+            input_buffer_length: u32,
+            output_buffer: *mut std::ffi::c_void,
+            output_buffer_length: u32,
+        ) -> i32;
+    }
+
+    const PROCESSOR_INFORMATION: i32 = 11;
+
+    if num_cpus == 0 {
+        return None;
+    }
+
+    let entry_size = mem::size_of::<ProcessorPowerInformation>();
+    let buf_len = entry_size * num_cpus;
+    let mut buffer = vec![0u8; buf_len];
+
+    let status = unsafe {
+        CallNtPowerInformation(
+            PROCESSOR_INFORMATION,
+            std::ptr::null(),
+            0,
+            buffer.as_mut_ptr() as *mut std::ffi::c_void,
+            buf_len as u32,
+        )
+    };
+
+    if status != 0 {
+        return None;
+    }
+
+    let infos = unsafe {
+        std::slice::from_raw_parts(
+            buffer.as_ptr() as *const ProcessorPowerInformation,
+            num_cpus,
+        )
+    };
+
+    let total_mhz: u32 = infos.iter().map(|i| i.current_mhz).sum();
+    Some(total_mhz as f32 / num_cpus as f32 / 1000.0)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn current_frequency_ghz(_num_cpus: usize) -> Option<f32> {
+    None
 }
 
 #[cfg(test)]
