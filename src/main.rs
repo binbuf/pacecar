@@ -32,7 +32,13 @@ fn main() -> eframe::Result {
 
     let collector = SystemCollector::new();
     let interval = Duration::from_millis(config.polling_interval_ms);
-    let (_handle, receiver) = spawn_collector(Box::new(collector), interval);
+    let (handle, receiver) = spawn_collector(Box::new(collector), interval);
+
+    // Register a CTRL+C handler so the app exits cleanly when launched from a
+    // terminal. The handler triggers the collector's shutdown signal and then
+    // calls `ExitProcess` to tear down the process immediately (the eframe
+    // event loop cannot be signaled to close from an arbitrary thread).
+    register_ctrl_handler(handle.shutdown_signal());
 
     let hotkey_manager = HotkeyManager::new(&config.hotkey);
 
@@ -46,7 +52,7 @@ fn main() -> eframe::Result {
         }
     };
 
-    eframe::run_native(
+    let result = eframe::run_native(
         "Pacecar",
         options,
         Box::new(move |_cc| {
@@ -57,5 +63,54 @@ fn main() -> eframe::Result {
                 tray_manager,
             )))
         }),
-    )
+    );
+
+    // Drop the collector handle explicitly so the background thread is joined
+    // before the process exits. The interruptible sleep + join timeout ensure
+    // this completes promptly.
+    drop(handle);
+
+    result
+}
+
+/// Register a Windows console control handler so CTRL+C from a terminal
+/// triggers a clean shutdown. When the handler fires, it signals the collector
+/// thread to stop and then calls `ExitProcess(0)` because the eframe/winit
+/// event loop cannot be woken from an arbitrary OS callback thread.
+#[cfg(target_os = "windows")]
+fn register_ctrl_handler(shutdown: pacecar::metrics::ShutdownSignal) {
+    use std::sync::OnceLock;
+
+    static SHUTDOWN: OnceLock<pacecar::metrics::ShutdownSignal> = OnceLock::new();
+    SHUTDOWN.get_or_init(|| shutdown);
+
+    unsafe extern "system" fn handler(ctrl_type: u32) -> i32 {
+        // CTRL_C_EVENT = 0, CTRL_BREAK_EVENT = 1, CTRL_CLOSE_EVENT = 2
+        if ctrl_type <= 2 {
+            if let Some(s) = SHUTDOWN.get() {
+                s.trigger();
+            }
+            // Give the collector thread a moment to finish.
+            std::thread::sleep(Duration::from_millis(100));
+            std::process::exit(0);
+        }
+        0 // not handled
+    }
+
+    unsafe extern "system" {
+        fn SetConsoleCtrlHandler(
+            handler: unsafe extern "system" fn(u32) -> i32,
+            add: i32,
+        ) -> i32;
+    }
+
+    unsafe {
+        SetConsoleCtrlHandler(handler, 1);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn register_ctrl_handler(_shutdown: pacecar::metrics::ShutdownSignal) {
+    // On non-Windows platforms, the default SIGINT handler terminates the
+    // process, which is acceptable.
 }

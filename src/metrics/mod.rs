@@ -12,9 +12,8 @@ use network::NetworkMetrics;
 
 use sysinfo::{Disks, Networks, System};
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -36,12 +35,50 @@ pub trait MetricsCollector: Send {
     fn collect(&mut self) -> MetricsSnapshot;
 }
 
+/// Shared shutdown signal that can wake a sleeping collector thread immediately.
+#[derive(Clone)]
+pub struct ShutdownSignal {
+    inner: Arc<(Mutex<bool>, Condvar)>,
+}
+
+impl ShutdownSignal {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new((Mutex::new(false), Condvar::new())),
+        }
+    }
+
+    /// Signal shutdown and wake any thread waiting on this signal.
+    pub fn trigger(&self) {
+        let (lock, cvar) = &*self.inner;
+        *lock.lock().unwrap() = true;
+        cvar.notify_all();
+    }
+
+    /// Check whether shutdown has been requested.
+    pub fn is_triggered(&self) -> bool {
+        *self.inner.0.lock().unwrap()
+    }
+
+    /// Sleep for at most `duration`, returning early if shutdown is signaled.
+    fn sleep_interruptible(&self, duration: Duration) {
+        let (lock, cvar) = &*self.inner;
+        let guard = lock.lock().unwrap();
+        if !*guard {
+            let _ = cvar.wait_timeout(guard, duration);
+        }
+    }
+}
+
 /// Handle returned when spawning the background collector thread.
 /// Drop this to signal the thread to stop.
 pub struct CollectorHandle {
-    shutdown: Arc<AtomicBool>,
+    shutdown: ShutdownSignal,
     thread: Option<thread::JoinHandle<()>>,
 }
+
+/// Maximum time to wait for the collector thread during shutdown.
+const JOIN_TIMEOUT: Duration = Duration::from_secs(2);
 
 impl CollectorHandle {
     /// Signal the collector thread to stop and wait for it to finish.
@@ -49,13 +86,24 @@ impl CollectorHandle {
         // shutdown flag is set in Drop
         drop(self);
     }
+
+    /// Return a clone of the shutdown signal (e.g. for CTRL+C handlers).
+    pub fn shutdown_signal(&self) -> ShutdownSignal {
+        self.shutdown.clone()
+    }
 }
 
 impl Drop for CollectorHandle {
     fn drop(&mut self) {
-        self.shutdown.store(true, Ordering::Relaxed);
+        self.shutdown.trigger();
         if let Some(handle) = self.thread.take() {
-            let _ = handle.join();
+            // Wait with a timeout so we never hang the process on exit.
+            let (done_tx, done_rx) = mpsc::sync_channel::<()>(0);
+            let _ = thread::spawn(move || {
+                let _ = handle.join();
+                let _ = done_tx.send(());
+            });
+            let _ = done_rx.recv_timeout(JOIN_TIMEOUT);
         }
     }
 }
@@ -69,17 +117,17 @@ pub fn spawn_collector(
     interval: Duration,
 ) -> (CollectorHandle, MetricsReceiver) {
     let (tx, rx) = mpsc::channel();
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let shutdown_flag = Arc::clone(&shutdown);
+    let shutdown = ShutdownSignal::new();
+    let shutdown_flag = shutdown.clone();
 
     let thread = thread::spawn(move || {
-        while !shutdown_flag.load(Ordering::Relaxed) {
+        while !shutdown_flag.is_triggered() {
             let snapshot = collector.collect();
             if tx.send(snapshot).is_err() {
                 // Receiver dropped — stop collecting.
                 break;
             }
-            thread::sleep(interval);
+            shutdown_flag.sleep_interruptible(interval);
         }
     });
 
