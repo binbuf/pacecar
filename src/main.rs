@@ -110,14 +110,20 @@ fn register_ctrl_handler(shutdown: pacecar::metrics::ShutdownSignal) {
     }
 
     unsafe extern "system" {
+        fn GetConsoleWindow() -> *mut core::ffi::c_void;
         fn SetConsoleCtrlHandler(
             handler: unsafe extern "system" fn(u32) -> i32,
             add: i32,
         ) -> i32;
     }
 
+    // Only register the handler when a console is already attached (i.e. the
+    // app was launched from a terminal). Calling SetConsoleCtrlHandler without
+    // a console can briefly flash one on screen.
     unsafe {
-        SetConsoleCtrlHandler(handler, 1);
+        if !GetConsoleWindow().is_null() {
+            SetConsoleCtrlHandler(handler, 1);
+        }
     }
 }
 

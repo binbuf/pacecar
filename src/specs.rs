@@ -102,9 +102,18 @@ Write-Output "GPU:$gpuStr"
 Write-Output "DISP:$dispStr"
 "#;
 
-    let output = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", ps_script])
-        .output();
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(["-NoProfile", "-Command", ps_script]);
+
+    // Hide the PowerShell console window so it doesn't flash on screen.
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = cmd.output();
 
     let mut mainboard = "Unknown".to_string();
     let mut memory_summary = "Unknown".to_string();
