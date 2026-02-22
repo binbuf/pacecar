@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use eframe::egui;
 
-use crate::config::{Config, OverlayMode, Position};
+use crate::config::{Config, OverlayMode, Position, Size};
 use crate::hotkey::{HotkeyAction, HotkeyManager};
 use crate::metrics::{MetricsReceiver, MetricsSnapshot};
 use crate::overlay;
@@ -18,6 +18,8 @@ pub struct PacecarApp {
     snapshot: Option<MetricsSnapshot>,
     /// Track the last saved position to avoid writing config on every frame.
     last_saved_position: Option<Position>,
+    /// Track the last saved size to avoid writing config on every frame.
+    last_saved_size: Size,
     /// Whether visuals have been configured.
     visuals_configured: bool,
     /// Whether the settings overlay is open.
@@ -42,6 +44,7 @@ impl PacecarApp {
     ) -> Self {
         Self {
             last_saved_position: config.window_position,
+            last_saved_size: config.window_size,
             config,
             receiver,
             snapshot: None,
@@ -158,8 +161,10 @@ impl eframe::App for PacecarApp {
         egui::CentralPanel::default()
             .frame(panel_frame)
             .show(ctx, |ui_ctx: &mut egui::Ui| {
-                // In interactive mode, allow dragging the window from the background
+                // In interactive mode, handle edge resize and dragging
                 if self.config.overlay_mode == OverlayMode::Interactive {
+                    overlay::handle_edge_resize(ctx, ui_ctx);
+
                     let response = ui_ctx.interact(
                         ui_ctx.max_rect(),
                         egui::Id::new("overlay_drag"),
@@ -220,15 +225,28 @@ impl eframe::App for PacecarApp {
             self.sync_tray_labels();
         }
 
-        // Persist window position when it changes
+        // Persist window position and size when they change
         if self.config.overlay_mode == OverlayMode::Interactive {
+            let mut layout_changed = false;
+
             if let Some(pos) = overlay::read_window_position(ctx) {
-                let changed = self.last_saved_position.as_ref() != Some(&pos);
-                if changed {
+                if self.last_saved_position.as_ref() != Some(&pos) {
                     self.config.window_position = Some(pos);
                     self.last_saved_position = Some(pos);
-                    let _ = self.config.save();
+                    layout_changed = true;
                 }
+            }
+
+            if let Some(size) = overlay::read_window_size(ctx) {
+                if self.last_saved_size != size {
+                    self.config.window_size = size;
+                    self.last_saved_size = size;
+                    layout_changed = true;
+                }
+            }
+
+            if layout_changed {
+                let _ = self.config.save();
             }
         }
 

@@ -56,8 +56,8 @@ pub struct Size {
 impl Default for Size {
     fn default() -> Self {
         Self {
-            width: 340.0,
-            height: 300.0,
+            width: 400.0,
+            height: 360.0,
         }
     }
 }
@@ -162,7 +162,7 @@ mod tests {
         assert_eq!(config.overlay_mode, OverlayMode::Interactive);
         assert_eq!(config.hotkey, "Ctrl+Shift+P");
         assert_eq!(config.window_position, None);
-        assert_eq!(config.window_size, Size { width: 340.0, height: 300.0 });
+        assert_eq!(config.window_size, Size { width: 400.0, height: 360.0 });
         assert_eq!(config.theme, Theme::Dark);
     }
 

@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use pacecar::app::PacecarApp;
 use pacecar::config::Config;
 use pacecar::hotkey::HotkeyManager;

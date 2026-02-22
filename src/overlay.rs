@@ -11,6 +11,7 @@ pub fn build_viewport(config: &Config, icon: Option<egui::IconData>) -> egui::Vi
         .with_always_on_top()
         .with_transparent(true)
         .with_taskbar(false)
+        .with_resizable(true)
         .with_inner_size(egui::vec2(
             config.window_size.width as f32,
             config.window_size.height as f32,
@@ -63,6 +64,68 @@ pub fn background_color(transparency: f32) -> egui::Color32 {
     egui::Color32::from_rgba_unmultiplied(22, 22, 26, alpha)
 }
 
+/// Width of the invisible resize border around the overlay edges.
+const RESIZE_BORDER: f32 = 6.0;
+
+/// Handle edge-drag resizing for the undecorated overlay window.
+/// Detects when the cursor is near a window edge and initiates a native resize
+/// on left-mouse press. Also sets the appropriate resize cursor.
+pub fn handle_edge_resize(ctx: &egui::Context, ui: &mut egui::Ui) {
+    let rect = ui.max_rect();
+    let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos()) else {
+        return;
+    };
+
+    let near_left = (pointer_pos.x - rect.left()).abs() < RESIZE_BORDER;
+    let near_right = (pointer_pos.x - rect.right()).abs() < RESIZE_BORDER;
+    let near_top = (pointer_pos.y - rect.top()).abs() < RESIZE_BORDER;
+    let near_bottom = (pointer_pos.y - rect.bottom()).abs() < RESIZE_BORDER;
+
+    let direction = match (near_left, near_right, near_top, near_bottom) {
+        (true, false, true, false) => Some(egui::ResizeDirection::NorthWest),
+        (false, true, true, false) => Some(egui::ResizeDirection::NorthEast),
+        (true, false, false, true) => Some(egui::ResizeDirection::SouthWest),
+        (false, true, false, true) => Some(egui::ResizeDirection::SouthEast),
+        (true, false, false, false) => Some(egui::ResizeDirection::West),
+        (false, true, false, false) => Some(egui::ResizeDirection::East),
+        (false, false, true, false) => Some(egui::ResizeDirection::North),
+        (false, false, false, true) => Some(egui::ResizeDirection::South),
+        _ => None,
+    };
+
+    if let Some(dir) = direction {
+        let cursor = match dir {
+            egui::ResizeDirection::North | egui::ResizeDirection::South => {
+                egui::CursorIcon::ResizeVertical
+            }
+            egui::ResizeDirection::East | egui::ResizeDirection::West => {
+                egui::CursorIcon::ResizeHorizontal
+            }
+            egui::ResizeDirection::NorthWest | egui::ResizeDirection::SouthEast => {
+                egui::CursorIcon::ResizeNwSe
+            }
+            egui::ResizeDirection::NorthEast | egui::ResizeDirection::SouthWest => {
+                egui::CursorIcon::ResizeNeSw
+            }
+        };
+        ctx.set_cursor_icon(cursor);
+
+        if ctx.input(|i| i.pointer.primary_pressed()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(dir));
+        }
+    }
+}
+
+/// Read the current inner window size from egui's viewport info.
+pub fn read_window_size(ctx: &egui::Context) -> Option<crate::config::Size> {
+    ctx.input(|i: &egui::InputState| {
+        i.viewport().inner_rect.map(|rect: egui::Rect| crate::config::Size {
+            width: rect.width() as f64,
+            height: rect.height() as f64,
+        })
+    })
+}
+
 /// Check if a saved position is still on-screen. Returns `None` if off-screen.
 pub fn validate_position(pos: &Position, screen_size: egui::Vec2) -> Option<Position> {
     // Allow some margin — the window should have at least 50px visible
@@ -96,7 +159,7 @@ mod tests {
         // Inner size should match config
         assert_eq!(
             vp.inner_size,
-            Some(egui::vec2(340.0, 300.0))
+            Some(egui::vec2(400.0, 360.0))
         );
         // No position set when config has None
         assert!(vp.position.is_none());

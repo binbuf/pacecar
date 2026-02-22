@@ -193,9 +193,10 @@ pub fn render_layout(
 pub fn configure_visuals(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::dark();
 
-    // Darker background
+    // Transparent panel background (the overlay itself draws its own bg)
     visuals.panel_fill = egui::Color32::from_rgba_unmultiplied(20, 20, 24, 0);
-    visuals.window_fill = egui::Color32::from_rgba_unmultiplied(20, 20, 24, 0);
+    // Opaque window fill so context menus and popups have a visible background
+    visuals.window_fill = egui::Color32::from_rgb(36, 36, 42);
 
     // Subtle widget styling
     visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(35, 35, 40);

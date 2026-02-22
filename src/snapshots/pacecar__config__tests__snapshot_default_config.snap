@@ -11,8 +11,8 @@ expression: json
   "hotkey": "Ctrl+Shift+P",
   "window_position": null,
   "window_size": {
-    "width": 340.0,
-    "height": 300.0
+    "width": 400.0,
+    "height": 360.0
   },
   "theme": "dark"
 }
