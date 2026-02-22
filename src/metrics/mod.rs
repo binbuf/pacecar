@@ -222,7 +222,6 @@ mod tests {
             timestamp: Instant::now(),
             cpu: CpuMetrics {
                 total_usage: 42.0,
-                per_core_usage: vec![40.0, 44.0],
                 frequency_ghz: 3.8,
             },
             memory: MemoryMetrics {
@@ -251,7 +250,6 @@ mod tests {
     fn snapshot_fields_accessible() {
         let snap = make_snapshot();
         assert_eq!(snap.cpu.total_usage, 42.0);
-        assert_eq!(snap.cpu.per_core_usage.len(), 2);
         assert_eq!(snap.cpu.frequency_ghz, 3.8);
         assert_eq!(snap.memory.used_bytes, 8_000_000_000);
         assert_eq!(snap.memory.total_bytes, 16_000_000_000);

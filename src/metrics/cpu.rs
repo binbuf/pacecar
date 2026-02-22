@@ -1,21 +1,10 @@
 use sysinfo::System;
 
-/// CPU metrics: total usage, per-core usage, and frequency.
-#[derive(Debug, Clone, PartialEq)]
+/// CPU metrics: total usage and frequency.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct CpuMetrics {
     pub total_usage: f32,
-    pub per_core_usage: Vec<f32>,
     pub frequency_ghz: f32,
-}
-
-impl Default for CpuMetrics {
-    fn default() -> Self {
-        Self {
-            total_usage: 0.0,
-            per_core_usage: Vec::new(),
-            frequency_ghz: 0.0,
-        }
-    }
 }
 
 /// Collect CPU metrics from a `sysinfo::System` instance.
@@ -29,7 +18,6 @@ pub fn collect_cpu(system: &System) -> CpuMetrics {
     let total_usage = system.global_cpu_usage();
 
     let cpus = system.cpus();
-    let per_core_usage: Vec<f32> = cpus.iter().map(|cpu| cpu.cpu_usage()).collect();
 
     // Try to get current (dynamic) frequency first; fall back to sysinfo's
     // base frequency if the platform-specific call is unavailable.
@@ -38,7 +26,6 @@ pub fn collect_cpu(system: &System) -> CpuMetrics {
 
     CpuMetrics {
         total_usage,
-        per_core_usage,
         frequency_ghz,
     }
 }
@@ -268,15 +255,6 @@ mod tests {
             metrics.total_usage
         );
 
-        for (i, &core) in metrics.per_core_usage.iter().enumerate() {
-            assert!(
-                (0.0..=100.0).contains(&core),
-                "core {} usage out of range: {}",
-                i,
-                core
-            );
-        }
-
         assert!(
             metrics.frequency_ghz >= 0.0,
             "frequency_ghz should be non-negative: {}",
@@ -288,7 +266,6 @@ mod tests {
     fn default_metrics_are_zero() {
         let m = CpuMetrics::default();
         assert_eq!(m.total_usage, 0.0);
-        assert!(m.per_core_usage.is_empty());
         assert_eq!(m.frequency_ghz, 0.0);
     }
 }
@@ -300,16 +277,12 @@ mod proptests {
 
     proptest! {
         #[test]
-        fn cpu_usage_always_in_range(total in 0.0f32..=100.0, cores in prop::collection::vec(0.0f32..=100.0, 1..128), freq in 0.0f32..=10.0) {
+        fn cpu_usage_always_in_range(total in 0.0f32..=100.0, freq in 0.0f32..=10.0) {
             let metrics = CpuMetrics {
                 total_usage: total,
-                per_core_usage: cores.clone(),
                 frequency_ghz: freq,
             };
             prop_assert!((0.0..=100.0).contains(&metrics.total_usage));
-            for &c in &metrics.per_core_usage {
-                prop_assert!((0.0..=100.0).contains(&c));
-            }
             prop_assert!(metrics.frequency_ghz >= 0.0);
         }
 

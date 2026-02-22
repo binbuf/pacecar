@@ -9,7 +9,7 @@ nvidia = ["dep:nvml-wrapper"]
 
 [dependencies]
 eframe = { version = "0.29", default-features = false, features = ["glow", "default_fonts"] }
-sysinfo = "0.33"
+sysinfo = { version = "0.33", default-features = false, features = ["system", "disk", "network"] }
 tray-icon = "0.19"
 muda = "0.15"
 global-hotkey = "0.7"
@@ -17,7 +17,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 directories = "5"
 nvml-wrapper = { version = "0.10", optional = true }
-image = { version = "0.25", default-features = false, features = ["ico"] }
 
 [build-dependencies]
 winresource = "0.1"
@@ -32,3 +31,4 @@ tempfile = "3"
 opt-level = "s"
 lto = true
 strip = true
+codegen-units = 1

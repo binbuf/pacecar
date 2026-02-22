@@ -244,7 +244,6 @@ mod tests {
             timestamp: Instant::now(),
             cpu: CpuMetrics {
                 total_usage: 42.0,
-                per_core_usage: vec![40.0, 44.0],
                 frequency_ghz: 3.8,
             },
             memory: MemoryMetrics {
