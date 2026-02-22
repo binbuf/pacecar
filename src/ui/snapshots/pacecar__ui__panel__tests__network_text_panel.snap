@@ -1,6 +1,5 @@
 ---
 source: src/ui/panel.rs
-assertion_line: 254
 expression: panel_snapshot(&panel)
 ---
 PanelSnapshot {
@@ -9,6 +8,7 @@ PanelSnapshot {
     secondary_value: Some(
         "↓ 11.4 MB/s",
     ),
+    tertiary_value: None,
     vis_branch: TextOnly,
     color_rgb: (
         255,

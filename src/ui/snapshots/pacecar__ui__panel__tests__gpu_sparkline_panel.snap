@@ -1,6 +1,5 @@
 ---
 source: src/ui/panel.rs
-assertion_line: 246
 expression: panel_snapshot(&panel)
 ---
 PanelSnapshot {
@@ -8,6 +7,9 @@ PanelSnapshot {
     primary_value: "28%",
     secondary_value: Some(
         "72°C",
+    ),
+    tertiary_value: Some(
+        "1.9/8 GB",
     ),
     vis_branch: Sparkline,
     color_rgb: (

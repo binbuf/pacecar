@@ -23,6 +23,8 @@ pub struct MetricPanel<'a> {
     pub primary_value: &'a str,
     /// Optional secondary value ("3.8 GHz", upload/download speeds).
     pub secondary_value: Option<&'a str>,
+    /// Optional tertiary value ("4.3/8 GB" VRAM, etc.).
+    pub tertiary_value: Option<&'a str>,
     /// Normalized value (0.0–1.0) for gauge mode. `None` for metrics
     /// without a natural percentage (Network, Disk).
     pub gauge_value: Option<f32>,
@@ -42,6 +44,7 @@ impl<'a> MetricPanel<'a> {
             label,
             primary_value,
             secondary_value: None,
+            tertiary_value: None,
             gauge_value: None,
             sparkline_history: None,
             sparkline_range: (0.0, 100.0),
@@ -52,6 +55,11 @@ impl<'a> MetricPanel<'a> {
 
     pub fn secondary_value(mut self, value: &'a str) -> Self {
         self.secondary_value = Some(value);
+        self
+    }
+
+    pub fn tertiary_value(mut self, value: &'a str) -> Self {
+        self.tertiary_value = Some(value);
         self
     }
 
@@ -167,6 +175,16 @@ impl<'a> Widget for MetricPanel<'a> {
                                 .monospace(),
                         );
                     }
+
+                    // Tertiary value (small, dimmed)
+                    if let Some(tertiary) = self.tertiary_value {
+                        ui.label(
+                            egui::RichText::new(tertiary)
+                                .color(Color32::from_gray(160))
+                                .size(10.0)
+                                .monospace(),
+                        );
+                    }
                 });
             })
             .response
@@ -240,6 +258,7 @@ mod tests {
         let history = [20.0, 25.0, 30.0, 28.0];
         let panel = MetricPanel::new("GPU", "28%", Color32::from_rgb(230, 80, 80))
             .secondary_value("72\u{00b0}C")
+            .tertiary_value("1.9/8 GB")
             .gauge_value(28.0)
             .sparkline(&history, (0.0, 100.0))
             .visualization(Visualization::Sparklines);
@@ -269,6 +288,7 @@ mod tests {
         label: String,
         primary_value: String,
         secondary_value: Option<String>,
+        tertiary_value: Option<String>,
         vis_branch: VisBranch,
         color_rgb: (u8, u8, u8),
     }
@@ -278,6 +298,7 @@ mod tests {
             label: panel.label.to_string(),
             primary_value: panel.primary_value.to_string(),
             secondary_value: panel.secondary_value.map(|s| s.to_string()),
+            tertiary_value: panel.tertiary_value.map(|s| s.to_string()),
             vis_branch: panel.vis_branch(),
             color_rgb: (panel.color.r(), panel.color.g(), panel.color.b()),
         }

@@ -1,6 +1,5 @@
 ---
 source: src/ui/panel.rs
-assertion_line: 235
 expression: panel_snapshot(&panel)
 ---
 PanelSnapshot {
@@ -9,6 +8,7 @@ PanelSnapshot {
     secondary_value: Some(
         "7.5/16 GB",
     ),
+    tertiary_value: None,
     vis_branch: Gauge,
     color_rgb: (
         80,

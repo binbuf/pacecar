@@ -61,12 +61,17 @@ pub fn render_layout(
 
     let gpu_primary;
     let gpu_secondary;
+    let gpu_tertiary;
     if let Some(gpu) = &snapshot.gpu {
         gpu_primary = Some(format!("{:.0}%", gpu.usage_percent));
         gpu_secondary = Some(format!("{:.0}\u{00B0}C", gpu.temperature_celsius));
+        let vram_used_gb = gpu.vram_used_bytes as f64 / 1_073_741_824.0;
+        let vram_total_gb = gpu.vram_total_bytes as f64 / 1_073_741_824.0;
+        gpu_tertiary = Some(format!("{:.1}/{:.0} GB", vram_used_gb, vram_total_gb));
     } else {
         gpu_primary = None;
         gpu_secondary = None;
+        gpu_tertiary = None;
     }
 
     let up = format_bytes_per_sec(snapshot.network.upload_bytes_per_sec);
@@ -109,12 +114,14 @@ pub fn render_layout(
             if let (Some(gpu), Some(gp), Some(gs)) =
                 (&snapshot.gpu, &gpu_primary, &gpu_secondary)
             {
-                ui.add(
-                    MetricPanel::new("GPU", gp, MetricColors::GPU)
-                        .secondary_value(gs)
-                        .gauge_value(gpu.usage_percent)
-                        .visualization(visualization),
-                );
+                let mut gpu_panel = MetricPanel::new("GPU", gp, MetricColors::GPU)
+                    .secondary_value(gs)
+                    .gauge_value(gpu.usage_percent)
+                    .visualization(visualization);
+                if let Some(ref gt) = gpu_tertiary {
+                    gpu_panel = gpu_panel.tertiary_value(gt);
+                }
+                ui.add(gpu_panel);
                 panels_added += 1;
                 if panels_added % cols == 0 { ui.end_row(); }
             }
