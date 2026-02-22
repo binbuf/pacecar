@@ -17,7 +17,7 @@ pub fn show_settings(ctx: &egui::Context, config: &mut Config) -> bool {
         egui::ViewportId::from_hash_of("pacecar_settings"),
         egui::ViewportBuilder::default()
             .with_title("Pacecar Settings")
-            .with_inner_size([340.0, 440.0])
+            .with_inner_size([350.0, 520.0])
             .with_resizable(false)
             .with_always_on_top()
             .with_minimize_button(false)
