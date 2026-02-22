@@ -166,7 +166,7 @@ impl eframe::App for PacecarApp {
                         egui::Sense::click_and_drag(),
                     );
 
-                    if response.is_pointer_button_down_on() {
+                    if response.drag_started_by(egui::PointerButton::Primary) {
                         ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                     }
 
