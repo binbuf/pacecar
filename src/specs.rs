@@ -73,32 +73,28 @@ if ($vramGB -gt 0) {
     $gpuStr = "$gpuName"
 }
 
-# Primary monitor resolution + refresh rate via EnumDisplaySettings (null = primary display).
+# Primary monitor resolution + refresh rate via EnumDisplaySettingsW.
+# Use a raw byte[] buffer to avoid struct layout/marshaling issues across .NET versions.
+# Passing null as device name targets the OS primary display.
+# DEVMODEW offsets: dmSize=68, dmPelsWidth=172, dmPelsHeight=176, dmDisplayFrequency=184.
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public class PrimaryDisplay {
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-    public struct DEVMODE {
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
-        public short dmSpecVersion; public short dmDriverVersion; public short dmSize; public short dmDriverExtra;
-        public int dmFields; public int dmPositionX; public int dmPositionY;
-        public int dmDisplayOrientation; public int dmDisplayFixedOutput;
-        public short dmColor; public short dmDuplex; public short dmYResolution;
-        public short dmTTOption; public short dmCollate;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
-        public short dmLogPixels; public int dmBitsPerPel;
-        public int dmPelsWidth; public int dmPelsHeight;
-        public int dmDisplayFlags; public int dmDisplayFrequency;
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern bool EnumDisplaySettingsW(string name, int mode, byte[] dm);
+    public static string Query() {
+        byte[] dm = new byte[512];
+        BitConverter.GetBytes((ushort)220).CopyTo(dm, 68);
+        if (!EnumDisplaySettingsW(null, -1, dm)) return "Unknown";
+        uint w  = BitConverter.ToUInt32(dm, 172);
+        uint h  = BitConverter.ToUInt32(dm, 176);
+        uint hz = BitConverter.ToUInt32(dm, 184);
+        return w + " x " + h + " @ " + hz + " Hz";
     }
-    [DllImport("user32.dll", CharSet = CharSet.Ansi)]
-    public static extern bool EnumDisplaySettings(string dev, int mode, ref DEVMODE dm);
 }
 '@
-$dm = New-Object PrimaryDisplay+DEVMODE
-$dm.dmSize = [System.Runtime.InteropServices.Marshal]::SizeOf($dm)
-[PrimaryDisplay]::EnumDisplaySettings($null, -1, [ref]$dm) | Out-Null
-$dispStr = "$($dm.dmPelsWidth) x $($dm.dmPelsHeight) @ $($dm.dmDisplayFrequency) Hz"
+$dispStr = [PrimaryDisplay]::Query()
 
 Write-Output "BOARD:$boardStr"
 Write-Output "MEM:$memStr"
