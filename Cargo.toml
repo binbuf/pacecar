@@ -21,6 +21,7 @@ nvml-wrapper = { version = "0.10", optional = true }
 mockall = "0.13"
 insta = "1"
 proptest = "1"
+tempfile = "3"
 
 [profile.release]
 opt-level = "s"

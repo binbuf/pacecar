@@ -1,0 +1,18 @@
+---
+source: src/config.rs
+assertion_line: 289
+expression: json
+---
+{
+  "polling_interval_ms": 1000,
+  "transparency": 0.85,
+  "visualization": "gauges",
+  "overlay_mode": "interactive",
+  "hotkey": "Ctrl+Shift+P",
+  "window_position": null,
+  "window_size": {
+    "width": 320.0,
+    "height": 240.0
+  },
+  "theme": "dark"
+}
