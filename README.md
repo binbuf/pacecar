@@ -63,5 +63,9 @@ Pacecar uses a test-driven approach for core logic:
 cargo test
 ```
 
+## Credits
+
+- App icon: [Races Speed](https://www.svgrepo.com/svg/273959/races-speed) from SVG Repo (CC0 License)
+
 ## 📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.

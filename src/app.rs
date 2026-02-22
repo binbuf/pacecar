@@ -110,8 +110,8 @@ impl eframe::App for PacecarApp {
         }
 
         // Poll for tray events
-        if let Some(ref _tray) = self.tray_manager {
-            if let Some(action) = _tray.poll() {
+        if let Some(ref tray) = self.tray_manager {
+            if let Some(action) = tray.poll() {
                 match action {
                     TrayAction::ToggleVisibility => {
                         self.toggle_visibility(ctx);
@@ -131,6 +131,10 @@ impl eframe::App for PacecarApp {
                     TrayAction::Quit => {
                         self.quit_requested = true;
                         let _ = self.config.save();
+                        // Make window visible first so the close command is processed
+                        if !self.visible {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                        }
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 }

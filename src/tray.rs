@@ -26,8 +26,12 @@ pub struct TrayManager {
 impl TrayManager {
     /// Create and display the system tray icon with context menu.
     /// Must be called before the eframe event loop starts.
-    pub fn new(visible: bool, mode: OverlayMode) -> Result<Self, String> {
-        let icon = generate_icon().map_err(|e| format!("failed to create tray icon: {e}"))?;
+    /// If `icon` is provided, it is used as the tray icon; otherwise a default is generated.
+    pub fn new(visible: bool, mode: OverlayMode, icon: Option<Icon>) -> Result<Self, String> {
+        let icon = match icon {
+            Some(i) => i,
+            None => generate_icon().map_err(|e| format!("failed to create tray icon: {e}"))?,
+        };
 
         let show_hide_item = MenuItem::new(visibility_label(visible), true, None);
         let mode_item = MenuItem::new(mode_label(mode), true, None);
@@ -58,33 +62,42 @@ impl TrayManager {
     }
 
     /// Poll for tray menu events. Returns `Some(TrayAction)` if a menu item was clicked,
-    /// or if the tray icon was double-clicked.
+    /// or if the tray icon was double-clicked. Drains all pending events and returns the
+    /// highest-priority action (Quit > others).
     pub fn poll(&self) -> Option<TrayAction> {
-        // Check for double-click on the tray icon
-        if let Ok(event) = TrayIconEvent::receiver().try_recv() {
+        let mut action: Option<TrayAction> = None;
+
+        // Drain all pending tray icon events
+        while let Ok(event) = TrayIconEvent::receiver().try_recv() {
             if matches!(event, TrayIconEvent::DoubleClick { .. }) {
-                return Some(TrayAction::ToggleVisibility);
+                action = Some(TrayAction::ToggleVisibility);
             }
         }
 
-        // Check for menu item clicks
-        if let Ok(event) = MenuEvent::receiver().try_recv() {
+        // Drain all pending menu events
+        while let Ok(event) = MenuEvent::receiver().try_recv() {
             let id = event.id();
-            if id == self.show_hide_item.id() {
-                return Some(TrayAction::ToggleVisibility);
-            }
-            if id == self.mode_item.id() {
-                return Some(TrayAction::ToggleMode);
-            }
-            if id == self.settings_item.id() {
-                return Some(TrayAction::OpenSettings);
-            }
-            if id == self.quit_item.id() {
-                return Some(TrayAction::Quit);
+            let new_action = if id == self.quit_item.id() {
+                Some(TrayAction::Quit)
+            } else if id == self.show_hide_item.id() {
+                Some(TrayAction::ToggleVisibility)
+            } else if id == self.mode_item.id() {
+                Some(TrayAction::ToggleMode)
+            } else if id == self.settings_item.id() {
+                Some(TrayAction::OpenSettings)
+            } else {
+                None
+            };
+
+            // Quit takes priority over everything
+            if let Some(a) = new_action {
+                if a == TrayAction::Quit || action.is_none() {
+                    action = Some(a);
+                }
             }
         }
 
-        None
+        action
     }
 
     /// Update menu labels to reflect current app state.

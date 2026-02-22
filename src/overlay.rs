@@ -5,7 +5,7 @@ use eframe::egui;
 use crate::config::{Config, OverlayMode, Position};
 
 /// Build the initial viewport configuration from the user's config.
-pub fn build_viewport(config: &Config) -> egui::ViewportBuilder {
+pub fn build_viewport(config: &Config, icon: Option<egui::IconData>) -> egui::ViewportBuilder {
     let mut builder = egui::ViewportBuilder::default()
         .with_decorations(false)
         .with_always_on_top()
@@ -15,6 +15,10 @@ pub fn build_viewport(config: &Config) -> egui::ViewportBuilder {
             config.window_size.width as f32,
             config.window_size.height as f32,
         ));
+
+    if let Some(icon) = icon {
+        builder = builder.with_icon(std::sync::Arc::new(icon));
+    }
 
     if let Some(pos) = &config.window_position {
         builder = builder.with_position(egui::pos2(pos.x as f32, pos.y as f32));
@@ -81,7 +85,7 @@ mod tests {
     #[test]
     fn build_viewport_applies_config_defaults() {
         let config = Config::default();
-        let vp = build_viewport(&config);
+        let vp = build_viewport(&config, None);
 
         // Decorations should be off
         assert_eq!(vp.decorations, Some(false));
@@ -106,7 +110,7 @@ mod tests {
             window_position: Some(Position { x: 150.0, y: 250.0 }),
             ..Config::default()
         };
-        let vp = build_viewport(&config);
+        let vp = build_viewport(&config, None);
         assert_eq!(vp.position, Some(egui::pos2(150.0, 250.0)));
     }
 
@@ -116,7 +120,7 @@ mod tests {
             overlay_mode: OverlayMode::ClickThrough,
             ..Config::default()
         };
-        let vp = build_viewport(&config);
+        let vp = build_viewport(&config, None);
         assert_eq!(vp.mouse_passthrough, Some(true));
     }
 
@@ -129,7 +133,7 @@ mod tests {
             },
             ..Config::default()
         };
-        let vp = build_viewport(&config);
+        let vp = build_viewport(&config, None);
         assert_eq!(vp.inner_size, Some(egui::vec2(500.0, 400.0)));
     }
 

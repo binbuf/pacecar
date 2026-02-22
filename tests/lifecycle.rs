@@ -83,7 +83,7 @@ fn startup_sequence_order() {
     let config = pacecar::config::Config::default();
 
     // Step 2: Build viewport (doesn't need a display)
-    let _viewport = pacecar::overlay::build_viewport(&config);
+    let _viewport = pacecar::overlay::build_viewport(&config, None);
 
     // Step 3: Start metrics collector
     let collector = pacecar::metrics::SystemCollector::new();
