@@ -1,13 +1,15 @@
 // egui App impl, main render loop
 
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use eframe::egui;
 
 use crate::config::{Config, OverlayMode, Position, Size};
 use crate::hotkey::{HotkeyAction, HotkeyManager};
-use crate::metrics::{MetricsReceiver, MetricsSnapshot};
+use crate::metrics::discovery::AvailableDevices;
+use crate::metrics::{CollectorConfig, MetricsReceiver, MetricsSnapshot};
 use crate::overlay;
 use crate::specs::SystemSpecs;
 use crate::tray::{TrayAction, TrayManager};
@@ -55,6 +57,10 @@ pub struct PacecarApp {
     pre_hide_position: Option<Position>,
     /// Overlay mode before hiding, so we can restore passthrough state.
     pre_hide_mode: OverlayMode,
+    /// Discovered hardware devices (for settings UI dropdowns).
+    available_devices: AvailableDevices,
+    /// Shared collector config for device selection (synced to collector thread).
+    shared_collector_config: Arc<Mutex<CollectorConfig>>,
 }
 
 impl PacecarApp {
@@ -64,6 +70,8 @@ impl PacecarApp {
         hotkey_manager: Option<HotkeyManager>,
         tray_manager: Option<TrayManager>,
         specs_receiver: mpsc::Receiver<SystemSpecs>,
+        available_devices: AvailableDevices,
+        shared_collector_config: Arc<Mutex<CollectorConfig>>,
     ) -> Self {
         let initial_mode = config.overlay_mode;
         Self {
@@ -86,6 +94,8 @@ impl PacecarApp {
             last_applied_mode: initial_mode,
             pre_hide_position: None,
             pre_hide_mode: initial_mode,
+            available_devices,
+            shared_collector_config,
         }
     }
 
@@ -344,8 +354,16 @@ impl eframe::App for PacecarApp {
 
         // Settings overlay
         if self.show_settings {
-            if !ui::settings::show_settings(ctx, &mut self.config) {
+            if !ui::settings::show_settings(ctx, &mut self.config, &self.available_devices) {
                 self.show_settings = false;
+            }
+            // Sync device selection to the collector thread.
+            {
+                let mut cc = self.shared_collector_config.lock().unwrap();
+                cc.gpu_selection = self.config.gpu_selection.clone();
+                cc.cpu_selection = self.config.cpu_selection;
+                cc.network_interface = self.config.network_interface.clone();
+                cc.disk_device = self.config.disk_device.clone();
             }
             // Re-apply overlay mode only if settings changed it
             if self.config.overlay_mode != self.last_applied_mode {

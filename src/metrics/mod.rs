@@ -1,6 +1,9 @@
 pub mod cpu;
 pub mod disk;
+pub mod discovery;
 pub mod gpu;
+#[cfg(target_os = "windows")]
+pub mod gpu_d3dkmt;
 pub mod memory;
 pub mod network;
 
@@ -10,12 +13,35 @@ use gpu::GpuMetrics;
 use memory::MemoryMetrics;
 use network::NetworkMetrics;
 
+use crate::config::{Config, CpuSelection, DeviceFilter, GpuSelection};
+
 use sysinfo::{Disks, Networks, System};
 
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+
+/// Subset of Config containing device selection fields.
+/// Shared between the UI (writer) and collector thread (reader) via `Arc<Mutex<_>>`.
+#[derive(Debug, Clone)]
+pub struct CollectorConfig {
+    pub gpu_selection: GpuSelection,
+    pub cpu_selection: CpuSelection,
+    pub network_interface: DeviceFilter,
+    pub disk_device: DeviceFilter,
+}
+
+impl CollectorConfig {
+    pub fn from_config(config: &Config) -> Self {
+        Self {
+            gpu_selection: config.gpu_selection.clone(),
+            cpu_selection: config.cpu_selection.clone(),
+            network_interface: config.network_interface.clone(),
+            disk_device: config.disk_device.clone(),
+        }
+    }
+}
 
 /// A point-in-time snapshot of all system metrics.
 #[derive(Debug, Clone)]
@@ -147,21 +173,29 @@ pub struct SystemCollector {
     gpu_provider: Option<Box<dyn gpu::GpuProvider>>,
     prev_network: Option<network::NetworkState>,
     prev_disk: Option<disk::DiskState>,
+    shared_config: Arc<Mutex<CollectorConfig>>,
+    /// Track the last GPU selection to detect changes requiring re-init.
+    last_gpu_selection: GpuSelection,
 }
 
 impl SystemCollector {
-    pub fn new() -> Self {
+    pub fn new(shared_config: Arc<Mutex<CollectorConfig>>) -> Self {
         let mut system = System::new();
         // Warm up CPU metrics (first read is always 0%).
         system.refresh_cpu_all();
+
+        let gpu_selection = shared_config.lock().unwrap().gpu_selection.clone();
+        let gpu_provider = gpu::init_gpu_provider(&gpu_selection);
 
         Self {
             system,
             networks: Networks::new_with_refreshed_list(),
             disks: Disks::new_with_refreshed_list(),
-            gpu_provider: gpu::init_gpu_provider(),
+            gpu_provider,
             prev_network: None,
             prev_disk: None,
+            last_gpu_selection: gpu_selection,
+            shared_config,
         }
     }
 }
@@ -173,15 +207,25 @@ impl MetricsCollector for SystemCollector {
         self.networks.refresh(false);
         self.disks.refresh(false);
 
-        let cpu_metrics = cpu::collect_cpu(&self.system);
+        // Read the current device config snapshot.
+        let cfg = self.shared_config.lock().unwrap().clone();
+
+        // Re-init GPU provider if selection changed.
+        if cfg.gpu_selection != self.last_gpu_selection {
+            self.gpu_provider = gpu::init_gpu_provider(&cfg.gpu_selection);
+            self.last_gpu_selection = cfg.gpu_selection.clone();
+        }
+
+        let cpu_metrics = cpu::collect_cpu_selected(&self.system, &cfg.cpu_selection);
         let memory_metrics = memory::collect_memory(&self.system);
         let gpu_metrics = gpu::collect_gpu(&self.gpu_provider);
 
         let (network_metrics, net_state) =
-            network::collect_network(&self.networks, &self.prev_network);
+            network::collect_network(&self.networks, &self.prev_network, &cfg.network_interface);
         self.prev_network = Some(net_state);
 
-        let (disk_metrics, disk_state) = disk::collect_disk(&self.disks, &self.prev_disk);
+        let (disk_metrics, disk_state) =
+            disk::collect_disk(&self.disks, &self.prev_disk, &cfg.disk_device);
         self.prev_disk = Some(disk_state);
 
         MetricsSnapshot {

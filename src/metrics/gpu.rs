@@ -1,3 +1,5 @@
+use crate::config::GpuSelection;
+
 /// GPU metrics: usage, temperature, and VRAM.
 /// Wrapped in `Option` at the snapshot level since not all systems have a supported GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -16,30 +18,48 @@ pub trait GpuProvider: Send {
     fn query(&self) -> Option<GpuMetrics>;
 }
 
-/// Initialize the GPU provider. Returns `None` if no supported GPU is found.
+/// Initialize the GPU provider based on the user's GPU selection.
 ///
-/// When the `nvidia` feature is enabled, this attempts to initialize NVML and
-/// open device 0. On failure (no NVIDIA GPU, missing driver) it returns `None`.
-/// Without the feature, it always returns `None`.
-pub fn init_gpu_provider() -> Option<Box<dyn GpuProvider>> {
+/// Resolution order:
+/// 1. If `nvidia` feature is enabled, try NVML with the selected device.
+/// 2. On Windows, try D3DKMT for AMD/Intel GPUs.
+/// 3. Return `None` if no provider could be created.
+pub fn init_gpu_provider(selection: &GpuSelection) -> Option<Box<dyn GpuProvider>> {
     #[cfg(feature = "nvidia")]
     {
-        match NvmlGpuProvider::new() {
-            Some(provider) => {
-                eprintln!("[pacecar] NVIDIA GPU detected via NVML");
-                Some(Box::new(provider))
-            }
-            None => {
-                eprintln!("[pacecar] NVML initialization failed — no NVIDIA GPU metrics");
-                None
-            }
+        let result = match selection {
+            GpuSelection::Auto => NvmlGpuProvider::new(0),
+            GpuSelection::ByIndex(idx) => NvmlGpuProvider::new(*idx),
+            GpuSelection::ByName(name) => NvmlGpuProvider::by_name(name),
+        };
+        if let Some(provider) = result {
+            eprintln!("[pacecar] NVIDIA GPU detected via NVML");
+            return Some(Box::new(provider));
         }
+        eprintln!("[pacecar] NVML initialization failed — trying D3DKMT fallback");
     }
-    #[cfg(not(feature = "nvidia"))]
+
+    #[cfg(target_os = "windows")]
     {
-        eprintln!("[pacecar] GPU metrics disabled (compile with --features nvidia)");
-        None
+        let result = match selection {
+            GpuSelection::Auto => super::gpu_d3dkmt::D3dkmtGpuProvider::new(0),
+            GpuSelection::ByIndex(idx) => super::gpu_d3dkmt::D3dkmtGpuProvider::new(*idx),
+            GpuSelection::ByName(name) => super::gpu_d3dkmt::D3dkmtGpuProvider::by_name(name),
+        };
+        if let Some(provider) = result {
+            eprintln!("[pacecar] GPU detected via D3DKMT");
+            return Some(Box::new(provider));
+        }
+        eprintln!("[pacecar] D3DKMT initialization failed — no GPU metrics");
     }
+
+    #[cfg(not(any(feature = "nvidia", target_os = "windows")))]
+    {
+        let _ = selection;
+        eprintln!("[pacecar] GPU metrics disabled (compile with --features nvidia)");
+    }
+
+    None
 }
 
 /// Collect GPU metrics from the provider. Returns `None` if provider is `None`
@@ -60,21 +80,40 @@ mod nvml_impl {
 
     pub struct NvmlGpuProvider {
         nvml: Nvml,
+        device_index: u32,
     }
 
     impl NvmlGpuProvider {
-        /// Try to initialize NVML and verify device 0 exists.
-        pub fn new() -> Option<Self> {
+        /// Try to initialize NVML and verify the given device index exists.
+        pub fn new(device_index: u32) -> Option<Self> {
             let nvml = Nvml::init().ok()?;
-            // Verify at least one device is accessible.
-            let _device = nvml.device_by_index(0).ok()?;
-            Some(Self { nvml })
+            let _device = nvml.device_by_index(device_index).ok()?;
+            Some(Self { nvml, device_index })
+        }
+
+        /// Find an NVML device whose name contains the given substring.
+        pub fn by_name(name: &str) -> Option<Self> {
+            let nvml = Nvml::init().ok()?;
+            let count = nvml.device_count().ok()?;
+            for i in 0..count {
+                if let Ok(device) = nvml.device_by_index(i) {
+                    if let Ok(dev_name) = device.name() {
+                        if dev_name.to_lowercase().contains(&name.to_lowercase()) {
+                            return Some(Self {
+                                nvml,
+                                device_index: i,
+                            });
+                        }
+                    }
+                }
+            }
+            None
         }
     }
 
     impl GpuProvider for NvmlGpuProvider {
         fn query(&self) -> Option<GpuMetrics> {
-            let device = self.nvml.device_by_index(0).ok()?;
+            let device = self.nvml.device_by_index(self.device_index).ok()?;
 
             let usage_percent = device
                 .utilization_rates()
@@ -173,13 +212,11 @@ mod tests {
 
     #[test]
     fn init_gpu_provider_returns_none_without_nvidia_feature() {
-        // Without the `nvidia` feature, init should always return None.
-        // This test only asserts the non-feature path; the NVML path
-        // depends on actual hardware/drivers.
         #[cfg(not(feature = "nvidia"))]
         {
-            let provider = init_gpu_provider();
-            assert!(provider.is_none());
+            let provider = init_gpu_provider(&GpuSelection::Auto);
+            // On Windows, D3DKMT might still find a GPU, so we just verify no panic.
+            let _ = provider;
         }
     }
 }

@@ -41,7 +41,11 @@ fn config_round_trip_through_lifecycle() {
 #[test]
 fn metrics_collector_starts_and_shuts_down_cleanly() {
     // Simulate the startup/shutdown lifecycle for the metrics subsystem.
-    let collector = pacecar::metrics::SystemCollector::new();
+    let collector = pacecar::metrics::SystemCollector::new(
+        std::sync::Arc::new(std::sync::Mutex::new(
+            pacecar::metrics::CollectorConfig::from_config(&pacecar::config::Config::default()),
+        )),
+    );
     let interval = Duration::from_millis(100);
 
     let (handle, receiver) = pacecar::metrics::spawn_collector(Box::new(collector), interval);
@@ -64,7 +68,11 @@ fn metrics_collector_starts_and_shuts_down_cleanly() {
 fn collector_handle_drop_triggers_shutdown() {
     // Verify that dropping the CollectorHandle (as happens when main() returns)
     // cleanly stops the background thread.
-    let collector = pacecar::metrics::SystemCollector::new();
+    let collector = pacecar::metrics::SystemCollector::new(
+        std::sync::Arc::new(std::sync::Mutex::new(
+            pacecar::metrics::CollectorConfig::from_config(&pacecar::config::Config::default()),
+        )),
+    );
     let (_handle, _receiver) =
         pacecar::metrics::spawn_collector(Box::new(collector), Duration::from_millis(50));
 
@@ -86,7 +94,11 @@ fn startup_sequence_order() {
     let _viewport = pacecar::overlay::build_viewport(&config, None);
 
     // Step 3: Start metrics collector
-    let collector = pacecar::metrics::SystemCollector::new();
+    let collector = pacecar::metrics::SystemCollector::new(
+        std::sync::Arc::new(std::sync::Mutex::new(
+            pacecar::metrics::CollectorConfig::from_config(&pacecar::config::Config::default()),
+        )),
+    );
     let interval = Duration::from_millis(config.polling_interval_ms);
     let (handle, _receiver) = pacecar::metrics::spawn_collector(Box::new(collector), interval);
 

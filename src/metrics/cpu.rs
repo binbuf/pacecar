@@ -1,3 +1,4 @@
+use crate::config::CpuSelection;
 use sysinfo::System;
 
 /// CPU metrics: total usage and frequency.
@@ -21,6 +22,32 @@ pub fn collect_cpu(system: &System) -> CpuMetrics {
 
     // Try to get current (dynamic) frequency first; fall back to sysinfo's
     // base frequency if the platform-specific call is unavailable.
+    let frequency_ghz = current_frequency_ghz(cpus.len())
+        .unwrap_or_else(|| sysinfo_frequency_ghz(cpus));
+
+    CpuMetrics {
+        total_usage,
+        frequency_ghz,
+    }
+}
+
+/// Collect CPU metrics based on the current selection.
+///
+/// If `selection` is `Aggregate`, uses global CPU usage. If `Core(n)`,
+/// uses the usage of core `n`. Falls back to aggregate if the core index
+/// is out of range.
+pub fn collect_cpu_selected(system: &System, selection: &CpuSelection) -> CpuMetrics {
+    let total_usage = match selection {
+        CpuSelection::Aggregate => system.global_cpu_usage(),
+        CpuSelection::Core(idx) => {
+            let cpus = system.cpus();
+            cpus.get(*idx)
+                .map(|cpu| cpu.cpu_usage())
+                .unwrap_or_else(|| system.global_cpu_usage())
+        }
+    };
+
+    let cpus = system.cpus();
     let frequency_ghz = current_frequency_ghz(cpus.len())
         .unwrap_or_else(|| sysinfo_frequency_ghz(cpus));
 

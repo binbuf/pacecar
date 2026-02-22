@@ -1,3 +1,4 @@
+use crate::config::DeviceFilter;
 use sysinfo::Networks;
 use std::time::Instant;
 
@@ -26,10 +27,16 @@ pub struct NetworkState {
 pub fn collect_network(
     networks: &Networks,
     prev: &Option<NetworkState>,
+    filter: &DeviceFilter,
 ) -> (NetworkMetrics, NetworkState) {
-    // Sum cumulative bytes across all interfaces.
-    let total_sent: u64 = networks.iter().map(|(_, data)| data.total_transmitted()).sum();
-    let total_received: u64 = networks.iter().map(|(_, data)| data.total_received()).sum();
+    // Sum cumulative bytes, optionally filtered to a single interface.
+    let filtered = networks.iter().filter(|(name, _)| match filter {
+        DeviceFilter::All => true,
+        DeviceFilter::Named(target) => *name == target,
+    });
+    let (total_sent, total_received) = filtered.fold((0u64, 0u64), |(s, r), (_, data)| {
+        (s + data.total_transmitted(), r + data.total_received())
+    });
     let now = Instant::now();
 
     let current_state = NetworkState {
@@ -70,7 +77,7 @@ mod tests {
     #[test]
     fn first_tick_returns_zeros() {
         let networks = Networks::new_with_refreshed_list();
-        let (metrics, state) = collect_network(&networks, &None);
+        let (metrics, state) = collect_network(&networks, &None, &DeviceFilter::All);
 
         assert_eq!(metrics.upload_bytes_per_sec, 0);
         assert_eq!(metrics.download_bytes_per_sec, 0);
@@ -121,14 +128,14 @@ mod tests {
     #[test]
     fn collect_from_real_system() {
         let mut networks = Networks::new_with_refreshed_list();
-        let (metrics1, state1) = collect_network(&networks, &None);
+        let (metrics1, state1) = collect_network(&networks, &None, &DeviceFilter::All);
         assert_eq!(metrics1.upload_bytes_per_sec, 0);
         assert_eq!(metrics1.download_bytes_per_sec, 0);
 
         // Wait briefly and refresh for a second reading.
         std::thread::sleep(Duration::from_millis(100));
         networks.refresh(false);
-        let (metrics2, _state2) = collect_network(&networks, &Some(state1));
+        let (metrics2, _state2) = collect_network(&networks, &Some(state1), &DeviceFilter::All);
 
         // After refresh, speeds should be non-negative (we can't guarantee traffic).
         // Just verify no panic and the values are reasonable.

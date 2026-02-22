@@ -3,6 +3,56 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+/// Which GPU to monitor.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuSelection {
+    /// Auto-detect the best available GPU (NVML first, then D3DKMT).
+    Auto,
+    /// Select GPU by adapter index.
+    ByIndex(u32),
+    /// Select GPU by (substring of) adapter name.
+    ByName(String),
+}
+
+impl Default for GpuSelection {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
+/// Which CPU metric to display.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CpuSelection {
+    /// Aggregate usage across all cores.
+    Aggregate,
+    /// Usage for a specific core index.
+    Core(usize),
+}
+
+impl Default for CpuSelection {
+    fn default() -> Self {
+        Self::Aggregate
+    }
+}
+
+/// Filter for network interfaces or disk devices.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceFilter {
+    /// Aggregate across all devices.
+    All,
+    /// Filter to a single named device.
+    Named(String),
+}
+
+impl Default for DeviceFilter {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Visualization {
@@ -73,6 +123,10 @@ pub struct Config {
     pub window_position: Option<Position>,
     pub window_size: Size,
     pub theme: Theme,
+    pub gpu_selection: GpuSelection,
+    pub cpu_selection: CpuSelection,
+    pub network_interface: DeviceFilter,
+    pub disk_device: DeviceFilter,
 }
 
 impl Default for Config {
@@ -86,6 +140,10 @@ impl Default for Config {
             window_position: None,
             window_size: Size::default(),
             theme: Theme::default(),
+            gpu_selection: GpuSelection::default(),
+            cpu_selection: CpuSelection::default(),
+            network_interface: DeviceFilter::default(),
+            disk_device: DeviceFilter::default(),
         }
     }
 }
@@ -164,6 +222,10 @@ mod tests {
         assert_eq!(config.window_position, None);
         assert_eq!(config.window_size, Size { width: 400.0, height: 360.0 });
         assert_eq!(config.theme, Theme::Dark);
+        assert_eq!(config.gpu_selection, GpuSelection::Auto);
+        assert_eq!(config.cpu_selection, CpuSelection::Aggregate);
+        assert_eq!(config.network_interface, DeviceFilter::All);
+        assert_eq!(config.disk_device, DeviceFilter::All);
     }
 
     #[test]
@@ -247,6 +309,10 @@ mod tests {
             window_position: Some(Position { x: 100.0, y: 200.0 }),
             window_size: Size { width: 400.0, height: 300.0 },
             theme: Theme::Dark,
+            gpu_selection: GpuSelection::ByIndex(1),
+            cpu_selection: CpuSelection::Core(2),
+            network_interface: DeviceFilter::Named("eth0".to_string()),
+            disk_device: DeviceFilter::Named("C:\\".to_string()),
         };
 
         config.save_to_path(&path).unwrap();

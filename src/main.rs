@@ -4,11 +4,13 @@ use pacecar::app::PacecarApp;
 use pacecar::config::Config;
 use pacecar::hotkey::HotkeyManager;
 use pacecar::icon;
-use pacecar::metrics::{SystemCollector, spawn_collector};
+use pacecar::metrics::discovery::discover_devices;
+use pacecar::metrics::{CollectorConfig, SystemCollector, spawn_collector};
 use pacecar::overlay;
 use pacecar::specs;
 use pacecar::tray::TrayManager;
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 fn main() -> eframe::Result {
@@ -31,7 +33,13 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
 
-    let collector = SystemCollector::new();
+    // Discover available hardware devices (GPUs, CPU cores, NICs, disks).
+    let available_devices = discover_devices();
+
+    // Create the shared collector config for device selection.
+    let shared_collector_config = Arc::new(Mutex::new(CollectorConfig::from_config(&config)));
+
+    let collector = SystemCollector::new(Arc::clone(&shared_collector_config));
     let interval = Duration::from_millis(config.polling_interval_ms);
     let (handle, receiver) = spawn_collector(Box::new(collector), interval);
 
@@ -71,6 +79,8 @@ fn main() -> eframe::Result {
                 hotkey_manager,
                 tray_manager,
                 specs_receiver,
+                available_devices,
+                Arc::clone(&shared_collector_config),
             )))
         }),
     );

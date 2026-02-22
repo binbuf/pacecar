@@ -1,6 +1,6 @@
 ---
 source: src/config.rs
-assertion_line: 289
+assertion_line: 355
 expression: json
 ---
 {
@@ -14,5 +14,9 @@ expression: json
     "width": 400.0,
     "height": 360.0
   },
-  "theme": "dark"
+  "theme": "dark",
+  "gpu_selection": "auto",
+  "cpu_selection": "aggregate",
+  "network_interface": "all",
+  "disk_device": "all"
 }

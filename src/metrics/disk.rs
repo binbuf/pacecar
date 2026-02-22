@@ -1,3 +1,4 @@
+use crate::config::DeviceFilter;
 use sysinfo::Disks;
 use std::time::Instant;
 
@@ -26,10 +27,16 @@ pub struct DiskState {
 pub fn collect_disk(
     disks: &Disks,
     prev: &Option<DiskState>,
+    filter: &DeviceFilter,
 ) -> (DiskMetrics, DiskState) {
-    // Sum cumulative bytes across all disk devices.
-    let total_read: u64 = disks.iter().map(|d| d.usage().total_read_bytes).sum();
-    let total_written: u64 = disks.iter().map(|d| d.usage().total_written_bytes).sum();
+    // Sum cumulative bytes, optionally filtered to a single disk mount point.
+    let filtered = disks.iter().filter(|d| match filter {
+        DeviceFilter::All => true,
+        DeviceFilter::Named(target) => d.mount_point().to_string_lossy() == target.as_str(),
+    });
+    let (total_read, total_written) = filtered.fold((0u64, 0u64), |(r, w), d| {
+        (r + d.usage().total_read_bytes, w + d.usage().total_written_bytes)
+    });
     let now = Instant::now();
 
     let current_state = DiskState {
@@ -70,7 +77,7 @@ mod tests {
     #[test]
     fn first_tick_returns_zeros() {
         let disks = Disks::new_with_refreshed_list();
-        let (metrics, state) = collect_disk(&disks, &None);
+        let (metrics, state) = collect_disk(&disks, &None, &DeviceFilter::All);
 
         assert_eq!(metrics.read_bytes_per_sec, 0);
         assert_eq!(metrics.write_bytes_per_sec, 0);
@@ -121,14 +128,14 @@ mod tests {
     #[test]
     fn collect_from_real_system() {
         let mut disks = Disks::new_with_refreshed_list();
-        let (metrics1, state1) = collect_disk(&disks, &None);
+        let (metrics1, state1) = collect_disk(&disks, &None, &DeviceFilter::All);
         assert_eq!(metrics1.read_bytes_per_sec, 0);
         assert_eq!(metrics1.write_bytes_per_sec, 0);
 
         // Wait briefly and refresh for a second reading.
         std::thread::sleep(Duration::from_millis(100));
         disks.refresh(false);
-        let (metrics2, _state2) = collect_disk(&disks, &Some(state1));
+        let (metrics2, _state2) = collect_disk(&disks, &Some(state1), &DeviceFilter::All);
 
         // After refresh, speeds should be non-negative (we can't guarantee I/O).
         // Just verify no panic and the values are reasonable.
