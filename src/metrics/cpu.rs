@@ -53,67 +53,178 @@ fn sysinfo_frequency_ghz(cpus: &[sysinfo::Cpu]) -> f32 {
     }
 }
 
-/// Read current (dynamic) CPU frequency via the Windows
-/// `CallNtPowerInformation` API. Returns `None` on non-Windows platforms
-/// or if the call fails.
+/// Read current (dynamic) CPU frequency via Windows Performance Counters
+/// (PDH). Uses `% Processor Performance` (a rate counter that shows the
+/// current operating frequency as a percentage of nominal speed) multiplied
+/// by the base frequency — this is the same method Task Manager uses.
+///
+/// The PDH query is kept open across calls via `thread_local!` because rate
+/// counters need at least two `PdhCollectQueryData` calls to produce a
+/// meaningful value.
+///
+/// Returns `None` on non-Windows platforms or if the PDH query fails.
 #[cfg(target_os = "windows")]
-fn current_frequency_ghz(num_cpus: usize) -> Option<f32> {
+fn current_frequency_ghz(_num_cpus: usize) -> Option<f32> {
+    use std::cell::RefCell;
     use std::mem;
+    use std::ptr;
+
+    type PdhHquery = isize;
+    type PdhHcounter = isize;
 
     #[repr(C)]
-    struct ProcessorPowerInformation {
-        _number: u32,
-        _max_mhz: u32,
-        current_mhz: u32,
-        _mhz_limit: u32,
-        _max_idle_state: u32,
-        _current_idle_state: u32,
+    struct PdhFmtCounterValue {
+        cstatus: u32,
+        double_value: f64,
     }
 
-    #[link(name = "powrprof")]
+    const PDH_FMT_DOUBLE: u32 = 0x0000_0200;
+
+    #[link(name = "pdh")]
     unsafe extern "system" {
-        fn CallNtPowerInformation(
-            information_level: i32,
-            input_buffer: *const std::ffi::c_void,
-            input_buffer_length: u32,
-            output_buffer: *mut std::ffi::c_void,
-            output_buffer_length: u32,
+        fn PdhOpenQueryA(
+            data_source: *const u8,
+            user_data: usize,
+            query: *mut PdhHquery,
         ) -> i32;
+        fn PdhAddEnglishCounterA(
+            query: PdhHquery,
+            counter_path: *const u8,
+            user_data: usize,
+            counter: *mut PdhHcounter,
+        ) -> i32;
+        fn PdhCollectQueryData(query: PdhHquery) -> i32;
+        fn PdhGetFormattedCounterValue(
+            counter: PdhHcounter,
+            format: u32,
+            counter_type: *mut u32,
+            value: *mut PdhFmtCounterValue,
+        ) -> i32;
+        fn PdhCloseQuery(query: PdhHquery) -> i32;
     }
 
-    const PROCESSOR_INFORMATION: i32 = 11;
-
-    if num_cpus == 0 {
-        return None;
+    /// Persistent PDH query state, kept alive across calls on the collector thread.
+    struct PdhFreqQuery {
+        query: PdhHquery,
+        perf_counter: PdhHcounter,
+        freq_counter: PdhHcounter,
+        /// First collect produces no usable rate data; skip it.
+        warmed_up: bool,
     }
 
-    let entry_size = mem::size_of::<ProcessorPowerInformation>();
-    let buf_len = entry_size * num_cpus;
-    let mut buffer = vec![0u8; buf_len];
+    impl PdhFreqQuery {
+        fn new() -> Option<Self> {
+            let perf_path =
+                b"\\Processor Information(_Total)\\% Processor Performance\0";
+            let freq_path =
+                b"\\Processor Information(_Total)\\Processor Frequency\0";
 
-    let status = unsafe {
-        CallNtPowerInformation(
-            PROCESSOR_INFORMATION,
-            std::ptr::null(),
-            0,
-            buffer.as_mut_ptr() as *mut std::ffi::c_void,
-            buf_len as u32,
-        )
-    };
+            unsafe {
+                let mut query: PdhHquery = 0;
+                if PdhOpenQueryA(ptr::null(), 0, &mut query) != 0 {
+                    return None;
+                }
 
-    if status != 0 {
-        return None;
+                let mut perf_counter: PdhHcounter = 0;
+                if PdhAddEnglishCounterA(
+                    query,
+                    perf_path.as_ptr(),
+                    0,
+                    &mut perf_counter,
+                ) != 0
+                {
+                    PdhCloseQuery(query);
+                    return None;
+                }
+
+                let mut freq_counter: PdhHcounter = 0;
+                if PdhAddEnglishCounterA(
+                    query,
+                    freq_path.as_ptr(),
+                    0,
+                    &mut freq_counter,
+                ) != 0
+                {
+                    PdhCloseQuery(query);
+                    return None;
+                }
+
+                // First collect seeds the rate counter baseline.
+                let _ = PdhCollectQueryData(query);
+
+                Some(Self {
+                    query,
+                    perf_counter,
+                    freq_counter,
+                    warmed_up: false,
+                })
+            }
+        }
+
+        fn read(&mut self) -> Option<f32> {
+            unsafe {
+                if PdhCollectQueryData(self.query) != 0 {
+                    return None;
+                }
+
+                if !self.warmed_up {
+                    self.warmed_up = true;
+                    // Rate counters need two collects; the first real value
+                    // will come on the next call.
+                    return None;
+                }
+
+                // Read % Processor Performance (percentage of nominal speed,
+                // can exceed 100% when boosting).
+                let mut perf_val = mem::zeroed::<PdhFmtCounterValue>();
+                let mut counter_type: u32 = 0;
+                if PdhGetFormattedCounterValue(
+                    self.perf_counter,
+                    PDH_FMT_DOUBLE,
+                    &mut counter_type,
+                    &mut perf_val,
+                ) != 0
+                {
+                    return None;
+                }
+
+                // Read Processor Frequency (nominal/base MHz).
+                let mut freq_val = mem::zeroed::<PdhFmtCounterValue>();
+                if PdhGetFormattedCounterValue(
+                    self.freq_counter,
+                    PDH_FMT_DOUBLE,
+                    &mut counter_type,
+                    &mut freq_val,
+                ) != 0
+                {
+                    return None;
+                }
+
+                // current_mhz = base_mhz × (perf% / 100)
+                let current_mhz =
+                    freq_val.double_value * perf_val.double_value / 100.0;
+                let ghz = current_mhz as f32 / 1000.0;
+                if ghz > 0.0 { Some(ghz) } else { None }
+            }
+        }
     }
 
-    let infos = unsafe {
-        std::slice::from_raw_parts(
-            buffer.as_ptr() as *const ProcessorPowerInformation,
-            num_cpus,
-        )
-    };
+    impl Drop for PdhFreqQuery {
+        fn drop(&mut self) {
+            unsafe {
+                PdhCloseQuery(self.query);
+            }
+        }
+    }
 
-    let total_mhz: u32 = infos.iter().map(|i| i.current_mhz).sum();
-    Some(total_mhz as f32 / num_cpus as f32 / 1000.0)
+    thread_local! {
+        static FREQ_QUERY: RefCell<Option<PdhFreqQuery>> =
+            RefCell::new(PdhFreqQuery::new());
+    }
+
+    FREQ_QUERY.with(|cell| {
+        cell.borrow_mut().as_mut().and_then(|q| q.read())
+    })
 }
 
 #[cfg(not(target_os = "windows"))]
