@@ -9,7 +9,7 @@ nvidia = ["dep:nvml-wrapper"]
 
 [dependencies]
 eframe = "0.29"
-sysinfo = "0.32"
+sysinfo = "0.33"
 tray-icon = "0.19"
 global-hotkey = "0.7"
 serde = { version = "1", features = ["derive"] }

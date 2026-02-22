@@ -127,7 +127,7 @@ mod tests {
 
         // Wait briefly and refresh for a second reading.
         std::thread::sleep(Duration::from_millis(100));
-        networks.refresh();
+        networks.refresh(false);
         let (metrics2, _state2) = collect_network(&networks, &Some(state1));
 
         // After refresh, speeds should be non-negative (we can't guarantee traffic).
