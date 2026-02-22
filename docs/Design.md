@@ -225,6 +225,34 @@ On tray "Quit"     → save config → stop collector → exit
 
 ---
 
+## Quality Assurance & Testing
+
+### Testing Strategy
+
+Pacecar follows a test-driven approach for core logic, ensuring metrics collection and configuration handling are robust and deterministic.
+
+1.  **Unit Testing**: Mandatory for all non-UI logic. Focus on `metrics/` and `config.rs`.
+2.  **Mocking**: System-dependent calls (e.g., `sysinfo`, `nvml`) must be abstracted behind traits to allow for deterministic unit tests that run on any platform.
+3.  **Snapshot Testing**: Used for verifying default configurations and ensuring UI layout regressions are caught early.
+4.  **Property-based Testing**: Used for complex metric conversions (e.g., bytes to human-readable strings) to ensure edge cases are handled.
+
+### Tooling
+
+| Category | Tool | Rationale |
+|----------|------|-----------|
+| Test Runner | `cargo test` | Standard Rust testing framework. |
+| Mocking | `mockall` | Powerful trait-based mocking for system abstractions. |
+| Snapshots | `insta` | Industry standard for snapshot testing in Rust. |
+| Property Testing | `proptest` | For verifying mathematical correctness across a wide range of inputs. |
+
+### Coverage Goals
+
+- **Metrics Logic**: > 90% coverage.
+- **Config Management**: 100% coverage for defaults and serialization.
+- **UI Logic**: Focused testing on widget state and layout calculations.
+
+---
+
 ## Future Considerations (Post-MVP)
 
 - Per-process top consumers view
