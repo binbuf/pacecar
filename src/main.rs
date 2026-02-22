@@ -8,6 +8,9 @@ mod ui;
 
 use app::PacecarApp;
 use config::Config;
+use metrics::{SystemCollector, spawn_collector};
+
+use std::time::Duration;
 
 fn main() -> eframe::Result {
     let config = Config::load();
@@ -19,9 +22,13 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
 
+    let collector = SystemCollector::new();
+    let interval = Duration::from_millis(config.polling_interval_ms);
+    let (_handle, receiver) = spawn_collector(Box::new(collector), interval);
+
     eframe::run_native(
         "Pacecar",
         options,
-        Box::new(move |_cc| Ok(Box::new(PacecarApp::new(config)))),
+        Box::new(move |_cc| Ok(Box::new(PacecarApp::new(config, receiver)))),
     )
 }

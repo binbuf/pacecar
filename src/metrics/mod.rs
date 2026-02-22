@@ -10,6 +10,8 @@ use gpu::GpuMetrics;
 use memory::MemoryMetrics;
 use network::NetworkMetrics;
 
+use sysinfo::{Disks, Networks, System};
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -87,6 +89,62 @@ pub fn spawn_collector(
     };
 
     (handle, MetricsReceiver { rx })
+}
+
+/// Concrete collector using sysinfo, with optional GPU provider.
+pub struct SystemCollector {
+    system: System,
+    networks: Networks,
+    disks: Disks,
+    gpu_provider: Option<Box<dyn gpu::GpuProvider>>,
+    prev_network: Option<network::NetworkState>,
+    prev_disk: Option<disk::DiskState>,
+}
+
+impl SystemCollector {
+    pub fn new() -> Self {
+        let mut system = System::new();
+        // Warm up CPU metrics (first read is always 0%).
+        system.refresh_cpu_all();
+
+        Self {
+            system,
+            networks: Networks::new_with_refreshed_list(),
+            disks: Disks::new_with_refreshed_list(),
+            gpu_provider: gpu::init_gpu_provider(),
+            prev_network: None,
+            prev_disk: None,
+        }
+    }
+}
+
+impl MetricsCollector for SystemCollector {
+    fn collect(&mut self) -> MetricsSnapshot {
+        self.system.refresh_cpu_all();
+        self.system.refresh_memory();
+        self.networks.refresh(false);
+        self.disks.refresh(false);
+
+        let cpu_metrics = cpu::collect_cpu(&self.system);
+        let memory_metrics = memory::collect_memory(&self.system);
+        let gpu_metrics = gpu::collect_gpu(&self.gpu_provider);
+
+        let (network_metrics, net_state) =
+            network::collect_network(&self.networks, &self.prev_network);
+        self.prev_network = Some(net_state);
+
+        let (disk_metrics, disk_state) = disk::collect_disk(&self.disks, &self.prev_disk);
+        self.prev_disk = Some(disk_state);
+
+        MetricsSnapshot {
+            timestamp: Instant::now(),
+            cpu: cpu_metrics,
+            memory: memory_metrics,
+            gpu: gpu_metrics,
+            network: network_metrics,
+            disk: disk_metrics,
+        }
+    }
 }
 
 /// UI-side receiver that drains the channel and returns the most recent snapshot.
