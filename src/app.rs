@@ -50,6 +50,11 @@ pub struct PacecarApp {
     /// Last overlay mode applied to the viewport, used to avoid sending
     /// redundant MousePassthrough commands every frame.
     last_applied_mode: OverlayMode,
+    /// Saved position before hiding. Used to restore the window when un-hiding
+    /// instead of using ViewportCommand::Visible which suspends the eframe loop.
+    pre_hide_position: Option<Position>,
+    /// Overlay mode before hiding, so we can restore passthrough state.
+    pre_hide_mode: OverlayMode,
 }
 
 impl PacecarApp {
@@ -79,19 +84,41 @@ impl PacecarApp {
             close_countdown: 0,
             wakeup_spawned: false,
             last_applied_mode: initial_mode,
+            pre_hide_position: None,
+            pre_hide_mode: initial_mode,
         }
     }
 
     /// Toggle overlay visibility and update the tray menu label.
+    ///
+    /// Instead of using `ViewportCommand::Visible(false)` — which suspends the
+    /// eframe event loop entirely on Windows (egui #5229) — we move the window
+    /// far off-screen and enable mouse passthrough.  The root viewport stays
+    /// "visible" to eframe so the event loop keeps pumping and tray/hotkey
+    /// events continue to be processed.
     fn toggle_visibility(&mut self, ctx: &egui::Context) {
         self.visible = !self.visible;
-        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(self.visible));
 
-        // If becoming visible while in click-through mode, switch to interactive
-        if self.visible && self.config.overlay_mode == OverlayMode::ClickThrough {
-            self.config.overlay_mode = OverlayMode::Interactive;
+        if self.visible {
+            // Restore: move window back to its saved position
+            if let Some(pos) = self.pre_hide_position.take() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                    egui::pos2(pos.x as f32, pos.y as f32),
+                ));
+            }
+            // Restore the overlay mode that was active before hiding
+            self.config.overlay_mode = self.pre_hide_mode;
             overlay::apply_overlay_mode(ctx, self.config.overlay_mode);
-            let _ = self.config.save();
+        } else {
+            // Save current position and mode before hiding
+            self.pre_hide_position = overlay::read_window_position(ctx);
+            self.pre_hide_mode = self.config.overlay_mode;
+            // Move off-screen and enable passthrough so the window is invisible
+            // but the event loop keeps running
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                egui::pos2(-10000.0, -10000.0),
+            ));
+            ctx.send_viewport_cmd(egui::ViewportCommand::MousePassthrough(true));
         }
 
         self.sync_tray_labels();
@@ -151,7 +178,11 @@ impl eframe::App for PacecarApp {
             self.quit_requested = true;
             let _ = self.config.save();
             if !self.visible {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                if let Some(pos) = self.pre_hide_position.take() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                        egui::pos2(pos.x as f32, pos.y as f32),
+                    ));
+                }
             }
             self.close_countdown = 2;
             ctx.request_repaint();
@@ -196,18 +227,20 @@ impl eframe::App for PacecarApp {
                     TrayAction::OpenSettings => {
                         // Ensure the overlay is visible so the user can see settings
                         if !self.visible {
-                            self.visible = true;
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                            self.sync_tray_labels();
+                            self.toggle_visibility(ctx);
                         }
                         self.show_settings = true;
                     }
                     TrayAction::Quit => {
                         self.quit_requested = true;
                         let _ = self.config.save();
-                        // Make window visible first so the close command is processed
+                        // Restore window on-screen so the close command is processed
                         if !self.visible {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                            if let Some(pos) = self.pre_hide_position.take() {
+                                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                                    egui::pos2(pos.x as f32, pos.y as f32),
+                                ));
+                            }
                         }
                         self.close_countdown = 2;
                         ctx.request_repaint();
@@ -236,8 +269,13 @@ impl eframe::App for PacecarApp {
                 if self.config.overlay_mode == OverlayMode::Interactive {
                     overlay::handle_edge_resize(ctx, ui_ctx);
 
+                    // Use the content rect (inside margins) instead of max_rect
+                    // so that the transparent edge pixels and rounded corners don't
+                    // intercept OS pointer events meant for windows underneath
+                    // (e.g. the taskbar / system tray).
+                    let drag_rect = ui_ctx.max_rect().shrink(8.0);
                     let response = ui_ctx.interact(
-                        ui_ctx.max_rect(),
+                        drag_rect,
                         egui::Id::new("overlay_drag"),
                         egui::Sense::click_and_drag(),
                     );
@@ -317,8 +355,8 @@ impl eframe::App for PacecarApp {
             self.sync_tray_labels();
         }
 
-        // Persist window position and size when they change
-        if self.config.overlay_mode == OverlayMode::Interactive {
+        // Persist window position and size when they change (skip when hidden off-screen)
+        if self.visible && self.config.overlay_mode == OverlayMode::Interactive {
             let mut layout_changed = false;
 
             if let Some(pos) = overlay::read_window_position(ctx) {
@@ -349,9 +387,9 @@ impl eframe::App for PacecarApp {
             } else if self.tray_manager.is_some() {
                 // X button with tray available — cancel the close and hide to tray
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                self.visible = false;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-                self.sync_tray_labels();
+                if self.visible {
+                    self.toggle_visibility(ctx);
+                }
             } else {
                 // No tray — allow the close (save config first)
                 let _ = self.config.save();

@@ -1,9 +1,12 @@
-// System tray icon, menu, events
+// System tray icon, menu, events — runs on a dedicated thread with its own
+// Win32 message pump so the context menu is always responsive regardless of
+// eframe's sleep state.
 
-use crossbeam_channel::Receiver;
+use std::sync::mpsc;
 
+use eframe::egui;
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
+use tray_icon::{Icon, TrayIconBuilder, TrayIconEvent};
 
 use crate::config::OverlayMode;
 
@@ -16,108 +19,261 @@ pub enum TrayAction {
     Quit,
 }
 
-/// Manages the system tray icon and context menu.
+/// Commands sent from the main thread to the tray thread.
+enum TrayCommand {
+    UpdateLabels { visible: bool, mode: OverlayMode },
+}
+
+/// Manages the system tray icon and context menu on a dedicated background
+/// thread.  The tray thread runs its own Win32 message pump so that
+/// `TrackPopupMenu` and `Shell_NotifyIcon` callbacks are always serviced,
+/// even when the eframe event loop is dormant.
 pub struct TrayManager {
-    _tray: TrayIcon,
-    show_hide_item: MenuItem,
-    mode_item: MenuItem,
-    settings_item: MenuItem,
-    quit_item: MenuItem,
-    /// Cached receiver for tray icon events (double-click, etc.)
-    tray_receiver: &'static Receiver<TrayIconEvent>,
-    /// Cached receiver for menu item click events
-    menu_receiver: &'static Receiver<MenuEvent>,
+    /// Receives actions from the tray thread whenever the user clicks a menu
+    /// item or double-clicks the icon.
+    action_rx: mpsc::Receiver<TrayAction>,
+    /// Sends commands (e.g. label updates) to the tray thread. MenuItem is
+    /// !Send so labels must be updated on the thread that owns them.
+    command_tx: mpsc::Sender<TrayCommand>,
 }
 
 impl TrayManager {
-    /// Create and display the system tray icon with context menu.
-    /// Must be called before the eframe event loop starts.
-    /// If `icon` is provided, it is used as the tray icon; otherwise a default is generated.
-    pub fn new(visible: bool, mode: OverlayMode, icon: Option<Icon>) -> Result<Self, String> {
+    /// Spawn the tray thread, create the icon and menu, and begin the message
+    /// pump.  `ctx` is used to wake the eframe event loop the instant a tray
+    /// event fires so that `update()` processes it with near-zero latency.
+    ///
+    /// If `icon` is `None`, a procedurally generated default icon is used.
+    pub fn new(
+        visible: bool,
+        mode: OverlayMode,
+        icon: Option<Icon>,
+        ctx: egui::Context,
+    ) -> Result<Self, String> {
         let icon = match icon {
             Some(i) => i,
             None => generate_icon().map_err(|e| format!("failed to create tray icon: {e}"))?,
         };
 
-        let show_hide_item = MenuItem::new(visibility_label(visible), true, None);
-        let mode_item = MenuItem::new(mode_label(mode), true, None);
-        let settings_item = MenuItem::new("Settings", true, None);
-        let quit_item = MenuItem::new("Quit", true, None);
+        // Channel for the tray thread to send actions to the main thread.
+        let (action_tx, action_rx) = mpsc::channel::<TrayAction>();
 
-        let menu = Menu::new();
-        menu.append(&show_hide_item).map_err(|e| format!("menu error: {e}"))?;
-        menu.append(&mode_item).map_err(|e| format!("menu error: {e}"))?;
-        menu.append(&settings_item).map_err(|e| format!("menu error: {e}"))?;
-        menu.append(&PredefinedMenuItem::separator()).map_err(|e| format!("menu error: {e}"))?;
-        menu.append(&quit_item).map_err(|e| format!("menu error: {e}"))?;
+        // Channel for the main thread to send commands to the tray thread.
+        let (command_tx, command_rx) = mpsc::channel::<TrayCommand>();
 
-        let tray = TrayIconBuilder::new()
-            .with_menu(Box::new(menu))
-            .with_tooltip("Pacecar")
-            .with_icon(icon)
-            .build()
-            .map_err(|e| format!("failed to build tray icon: {e}"))?;
+        // One-shot channel for the tray thread to report initialisation result.
+        let (init_tx, init_rx) = mpsc::channel::<Result<(), String>>();
 
-        // Cache the static receivers once so poll() doesn't call the accessor each frame
-        let tray_receiver = TrayIconEvent::receiver();
-        let menu_receiver = MenuEvent::receiver();
+        std::thread::Builder::new()
+            .name("tray".into())
+            .spawn(move || {
+                tray_thread(icon, visible, mode, ctx, action_tx, command_rx, init_tx);
+            })
+            .map_err(|e| format!("failed to spawn tray thread: {e}"))?;
+
+        // Block briefly until the tray thread finishes initialisation.
+        init_rx
+            .recv()
+            .map_err(|_| "tray thread exited before initialising".to_string())?
+            .map_err(|e| format!("tray init failed: {e}"))?;
 
         Ok(Self {
-            _tray: tray,
-            show_hide_item,
-            mode_item,
-            settings_item,
-            quit_item,
-            tray_receiver,
-            menu_receiver,
+            action_rx,
+            command_tx,
         })
     }
 
-    /// Poll for tray menu events. Returns `Some(TrayAction)` if a menu item was clicked,
-    /// or if the tray icon was double-clicked. Drains all pending events and returns the
-    /// highest-priority action (Quit > others).
+    /// Non-blocking poll for tray actions.  Drains all pending events and
+    /// returns the highest-priority action (Quit > others).
     pub fn poll(&self) -> Option<TrayAction> {
         let mut action: Option<TrayAction> = None;
-
-        // Drain all pending tray icon events
-        while let Ok(event) = self.tray_receiver.try_recv() {
-            if matches!(event, TrayIconEvent::DoubleClick { .. }) {
-                action = Some(TrayAction::ToggleVisibility);
+        while let Ok(a) = self.action_rx.try_recv() {
+            if a == TrayAction::Quit || action.is_none() {
+                action = Some(a);
             }
         }
-
-        // Drain all pending menu events
-        while let Ok(event) = self.menu_receiver.try_recv() {
-            let id = event.id();
-            let new_action = if id == self.quit_item.id() {
-                Some(TrayAction::Quit)
-            } else if id == self.show_hide_item.id() {
-                Some(TrayAction::ToggleVisibility)
-            } else if id == self.mode_item.id() {
-                Some(TrayAction::ToggleMode)
-            } else if id == self.settings_item.id() {
-                Some(TrayAction::OpenSettings)
-            } else {
-                None
-            };
-
-            // Quit takes priority over everything
-            if let Some(a) = new_action {
-                if a == TrayAction::Quit || action.is_none() {
-                    action = Some(a);
-                }
-            }
-        }
-
         action
     }
 
-    /// Update menu labels to reflect current app state.
+    /// Update menu labels to reflect current app state.  The command is sent
+    /// to the tray thread which owns the MenuItem handles.
     pub fn update_labels(&self, visible: bool, mode: OverlayMode) {
-        self.show_hide_item.set_text(visibility_label(visible));
-        self.mode_item.set_text(mode_label(mode));
+        let _ = self.command_tx.send(TrayCommand::UpdateLabels { visible, mode });
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tray thread entry point
+// ---------------------------------------------------------------------------
+
+fn tray_thread(
+    icon: Icon,
+    visible: bool,
+    mode: OverlayMode,
+    ctx: egui::Context,
+    action_tx: mpsc::Sender<TrayAction>,
+    command_rx: mpsc::Receiver<TrayCommand>,
+    init_tx: mpsc::Sender<Result<(), String>>,
+) {
+    // Build menu items
+    let show_hide_item = MenuItem::new(visibility_label(visible), true, None);
+    let mode_item = MenuItem::new(mode_label(mode), true, None);
+    let settings_item = MenuItem::new("Settings", true, None);
+    let quit_item = MenuItem::new("Quit", true, None);
+
+    let menu = Menu::new();
+    if let Err(e) = (|| -> Result<(), muda::Error> {
+        menu.append(&show_hide_item)?;
+        menu.append(&mode_item)?;
+        menu.append(&settings_item)?;
+        menu.append(&PredefinedMenuItem::separator())?;
+        menu.append(&quit_item)?;
+        Ok(())
+    })() {
+        let _ = init_tx.send(Err(format!("menu error: {e}")));
+        return;
+    }
+
+    // Keep the tray icon alive for the lifetime of this thread.
+    let _tray = match TrayIconBuilder::new()
+        .with_menu(Box::new(menu))
+        .with_tooltip("Pacecar")
+        .with_icon(icon)
+        .build()
+    {
+        Ok(t) => t,
+        Err(e) => {
+            let _ = init_tx.send(Err(format!("failed to build tray icon: {e}")));
+            return;
+        }
+    };
+
+    // --- Wire up event handlers ---
+    // These fire synchronously on THIS thread (inside DispatchMessage) and
+    // immediately wake the eframe loop via request_repaint().
+
+    let quit_id = quit_item.id().clone();
+    let show_hide_id = show_hide_item.id().clone();
+    let mode_id = mode_item.id().clone();
+    let settings_id = settings_item.id().clone();
+
+    let menu_tx = action_tx.clone();
+    let menu_ctx = ctx.clone();
+    MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
+        let id = event.id();
+        let action = if *id == quit_id {
+            Some(TrayAction::Quit)
+        } else if *id == show_hide_id {
+            Some(TrayAction::ToggleVisibility)
+        } else if *id == mode_id {
+            Some(TrayAction::ToggleMode)
+        } else if *id == settings_id {
+            Some(TrayAction::OpenSettings)
+        } else {
+            None
+        };
+        if let Some(a) = action {
+            let _ = menu_tx.send(a);
+            menu_ctx.request_repaint();
+        }
+    }));
+
+    let tray_tx = action_tx;
+    let tray_ctx = ctx;
+    TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
+        if matches!(event, TrayIconEvent::DoubleClick { .. }) {
+            let _ = tray_tx.send(TrayAction::ToggleVisibility);
+            tray_ctx.request_repaint();
+        }
+    }));
+
+    // Report success — the main thread is blocking on this.
+    let _ = init_tx.send(Ok(()));
+
+    // --- Native Win32 message pump ---
+    // This keeps the tray's hidden HWND serviced so TrackPopupMenu renders
+    // and responds instantly, independent of eframe.
+    #[cfg(target_os = "windows")]
+    {
+        use std::time::Duration;
+
+        #[repr(C)]
+        #[allow(non_snake_case)]
+        struct MSG {
+            hwnd: isize,
+            message: u32,
+            wParam: usize,
+            lParam: isize,
+            time: u32,
+            pt_x: i32,
+            pt_y: i32,
+        }
+
+        unsafe extern "system" {
+            fn PeekMessageW(
+                msg: *mut MSG,
+                hwnd: isize,
+                filter_min: u32,
+                filter_max: u32,
+                remove: u32,
+            ) -> i32;
+            fn TranslateMessage(msg: *const MSG) -> i32;
+            fn DispatchMessageW(msg: *const MSG) -> isize;
+        }
+
+        const PM_REMOVE: u32 = 0x0001;
+
+        loop {
+            // Drain all pending Win32 messages (menu clicks, tray events, etc.)
+            loop {
+                let mut msg = std::mem::MaybeUninit::<MSG>::uninit();
+                let has_msg = unsafe { PeekMessageW(msg.as_mut_ptr(), 0, 0, 0, PM_REMOVE) };
+                if has_msg == 0 {
+                    break;
+                }
+                unsafe {
+                    let msg = msg.as_ptr();
+                    TranslateMessage(msg);
+                    DispatchMessageW(msg);
+                }
+            }
+
+            // Process any pending label update commands from the main thread.
+            while let Ok(cmd) = command_rx.try_recv() {
+                match cmd {
+                    TrayCommand::UpdateLabels { visible, mode } => {
+                        show_hide_item.set_text(visibility_label(visible));
+                        mode_item.set_text(mode_label(mode));
+                    }
+                }
+            }
+
+            // Sleep briefly to avoid busy-spinning.  16ms ≈ 60 Hz is more
+            // than fast enough for tray interactions and keeps CPU near zero.
+            std::thread::sleep(Duration::from_millis(16));
+        }
+    }
+
+    // On non-Windows, just park the thread (tray-icon handles its own loop).
+    #[cfg(not(target_os = "windows"))]
+    {
+        loop {
+            // Process label commands periodically.
+            while let Ok(cmd) = command_rx.try_recv() {
+                match cmd {
+                    TrayCommand::UpdateLabels { visible, mode } => {
+                        show_hide_item.set_text(visibility_label(visible));
+                        mode_item.set_text(mode_label(mode));
+                    }
+                }
+            }
+            std::thread::park();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 fn visibility_label(visible: bool) -> &'static str {
     if visible { "Hide" } else { "Show" }

@@ -11,10 +11,6 @@ use pacecar::tray::TrayManager;
 
 use std::time::Duration;
 
-#![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
-    windows_subsystem = "windows"
-)]
 fn main() -> eframe::Result {
     let config = Config::load();
 
@@ -47,22 +43,28 @@ fn main() -> eframe::Result {
 
     let hotkey_manager = HotkeyManager::new(&config.hotkey);
 
-    // Initialize the system tray before the event loop.
-    // The tray must be created on the main thread before eframe takes over.
-    let tray_manager = match TrayManager::new(true, config.overlay_mode, tray_icon) {
-        Ok(tm) => Some(tm),
-        Err(e) => {
-            eprintln!("warn: failed to create system tray: {e}");
-            None
-        }
-    };
-
     let specs_receiver = specs::spawn_specs_collector();
 
     let result = eframe::run_native(
         "Pacecar",
         options,
-        Box::new(move |_cc| {
+        Box::new(move |cc| {
+            // Create the tray on a dedicated thread now that we have the
+            // egui::Context — the tray thread uses it to wake the event loop
+            // the instant a menu item is clicked.
+            let tray_manager = match TrayManager::new(
+                true,
+                config.overlay_mode,
+                tray_icon,
+                cc.egui_ctx.clone(),
+            ) {
+                Ok(tm) => Some(tm),
+                Err(e) => {
+                    eprintln!("warn: failed to create system tray: {e}");
+                    None
+                }
+            };
+
             Ok(Box::new(PacecarApp::new(
                 config,
                 receiver,
