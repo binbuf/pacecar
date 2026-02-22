@@ -11,6 +11,10 @@ use pacecar::tray::TrayManager;
 
 use std::time::Duration;
 
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
 fn main() -> eframe::Result {
     let config = Config::load();
 
