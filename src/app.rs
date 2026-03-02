@@ -14,6 +14,7 @@ use crate::overlay;
 use crate::specs::SystemSpecs;
 use crate::tray::{TrayAction, TrayManager};
 use crate::ui;
+use crate::ui::history::MetricsHistory;
 
 pub struct PacecarApp {
     config: Config,
@@ -34,6 +35,8 @@ pub struct PacecarApp {
     tray_manager: Option<TrayManager>,
     /// Whether the specs view is open.
     show_specs: bool,
+    /// Saved window size before opening specs view, to restore on close.
+    pre_specs_size: Option<Size>,
     /// Cached hardware specs (populated once from background thread).
     specs: Option<SystemSpecs>,
     /// Receiver for the one-shot specs collection result.
@@ -61,6 +64,10 @@ pub struct PacecarApp {
     available_devices: AvailableDevices,
     /// Shared collector config for device selection (synced to collector thread).
     shared_collector_config: Arc<Mutex<CollectorConfig>>,
+    /// Metric history for sparklines and history window.
+    history: MetricsHistory,
+    /// Whether the history window is open.
+    show_history: bool,
 }
 
 impl PacecarApp {
@@ -83,6 +90,7 @@ impl PacecarApp {
             visuals_configured: false,
             show_settings: false,
             show_specs: false,
+            pre_specs_size: None,
             specs: None,
             specs_receiver: Some(specs_receiver),
             hotkey_manager,
@@ -96,6 +104,8 @@ impl PacecarApp {
             pre_hide_mode: initial_mode,
             available_devices,
             shared_collector_config,
+            history: MetricsHistory::new(),
+            show_history: false,
         }
     }
 
@@ -206,7 +216,17 @@ impl eframe::App for PacecarApp {
 
         // Receive latest metrics (non-blocking)
         if let Some(snap) = self.receiver.latest() {
+            self.history.record(&snap);
             self.snapshot = Some(snap);
+        }
+
+        // Prune history to configured retention window
+        {
+            let retention_secs = self.config.history_retention_minutes as u64 * 60;
+            self.history.prune_all(
+                std::time::Instant::now(),
+                Duration::from_secs(retention_secs),
+            );
         }
 
         // Poll for specs result (one-shot)
@@ -321,12 +341,41 @@ impl eframe::App for PacecarApp {
 
                 // Header bar with gear and specs buttons
                 if self.config.overlay_mode == OverlayMode::Interactive {
-                    match ui::render_header(ui_ctx) {
+                    match ui::render_header(ui_ctx, self.config.layout_preset, self.config.show_mini_sparklines) {
                         ui::HeaderAction::OpenSettings => {
                             self.show_settings = true;
                         }
                         ui::HeaderAction::OpenSpecs => {
                             self.show_specs = !self.show_specs;
+                            if self.show_specs {
+                                // Save current size and resize for specs
+                                self.pre_specs_size = overlay::read_window_size(ctx);
+                                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                    egui::vec2(380.0, 160.0),
+                                ));
+                            } else if let Some(sz) = self.pre_specs_size.take() {
+                                // Restore previous size
+                                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                    egui::vec2(sz.width as f32, sz.height as f32),
+                                ));
+                            }
+                        }
+                        ui::HeaderAction::SetPreset(preset) => {
+                            self.config.layout_preset = preset;
+                            let new_size = match preset {
+                                crate::config::LayoutPreset::Wide => egui::vec2(520.0, 240.0),
+                                crate::config::LayoutPreset::Skinny => egui::vec2(130.0, 800.0),
+                                crate::config::LayoutPreset::Auto => egui::vec2(400.0, 360.0),
+                            };
+                            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(new_size));
+                            let _ = self.config.save();
+                        }
+                        ui::HeaderAction::ToggleMiniSparklines => {
+                            self.config.show_mini_sparklines = !self.config.show_mini_sparklines;
+                            let _ = self.config.save();
+                        }
+                        ui::HeaderAction::OpenHistory => {
+                            self.show_history = !self.show_history;
                         }
                         ui::HeaderAction::None => {}
                     }
@@ -343,7 +392,12 @@ impl eframe::App for PacecarApp {
                         );
                     }
                 } else if let Some(snapshot) = &self.snapshot {
-                    ui::render_layout(ui_ctx, snapshot, self.config.visualization);
+                    ui::render_layout(
+                        ui_ctx,
+                        snapshot,
+                        &self.config,
+                        &self.history,
+                    );
                 } else {
                     ui_ctx.colored_label(
                         egui::Color32::from_gray(150),
@@ -364,6 +418,15 @@ impl eframe::App for PacecarApp {
                 cc.cpu_selection = self.config.cpu_selection;
                 cc.network_interface = self.config.network_interface.clone();
                 cc.disk_device = self.config.disk_device.clone();
+                cc.ping_target = self.config.ping_target.clone();
+                cc.show_disk_temperature = self.config.show_disk_temperature;
+                cc.disk_temp_mode = self.config.disk_temp_mode;
+                cc.show_fan_speed = self.config.show_fan_speed;
+                cc.fan_speed_mode = self.config.fan_speed_mode;
+                cc.show_ram_temperature = self.config.show_ram_temperature;
+                cc.show_cpu_fan_speed = self.config.show_cpu_fan_speed;
+                cc.show_mainboard_temp = self.config.show_mainboard_temp;
+                cc.mainboard_temp_mode = self.config.mainboard_temp_mode;
             }
             // Re-apply overlay mode only if settings changed it
             if self.config.overlay_mode != self.last_applied_mode {
@@ -373,8 +436,16 @@ impl eframe::App for PacecarApp {
             self.sync_tray_labels();
         }
 
-        // Persist window position and size when they change (skip when hidden off-screen)
-        if self.visible && self.config.overlay_mode == OverlayMode::Interactive {
+        // History viewport
+        if self.show_history {
+            if !ui::history::show_history_window(ctx, &self.history, &mut self.config) {
+                self.show_history = false;
+            }
+        }
+
+        // Persist window position and size when they change (skip when hidden off-screen
+        // or when specs view is active to avoid overwriting the normal size)
+        if self.visible && self.config.overlay_mode == OverlayMode::Interactive && !self.show_specs {
             let mut layout_changed = false;
 
             if let Some(pos) = overlay::read_window_position(ctx) {

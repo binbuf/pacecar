@@ -1,22 +1,46 @@
 ---
 source: src/config.rs
-assertion_line: 355
+assertion_line: 546
 expression: json
 ---
 {
   "polling_interval_ms": 1000,
-  "transparency": 0.85,
+  "transparency": 0.65,
   "visualization": "gauges",
   "overlay_mode": "interactive",
   "hotkey": "Ctrl+Shift+P",
   "window_position": null,
   "window_size": {
-    "width": 400.0,
-    "height": 360.0
+    "width": 130.0,
+    "height": 800.0
   },
   "theme": "dark",
   "gpu_selection": "auto",
   "cpu_selection": "aggregate",
   "network_interface": "all",
-  "disk_device": "all"
+  "disk_device": "all",
+  "ping_target": "8.8.8.8",
+  "show_cpu_temperature": true,
+  "show_disk_temperature": true,
+  "disk_temp_mode": "selected_disk",
+  "show_fan_speed": true,
+  "fan_speed_mode": "highest",
+  "show_ram_temperature": true,
+  "show_cpu_fan_speed": true,
+  "show_gpu_fan_speed": true,
+  "show_mainboard_temp": true,
+  "mainboard_temp_mode": "highest",
+  "show_cpu": true,
+  "show_ram": true,
+  "show_gpu": true,
+  "show_network": true,
+  "show_disk": true,
+  "show_ping": true,
+  "show_graphs": false,
+  "show_percentage": true,
+  "show_secondary": true,
+  "show_tertiary": true,
+  "layout_preset": "skinny",
+  "show_mini_sparklines": true,
+  "history_retention_minutes": 30
 }

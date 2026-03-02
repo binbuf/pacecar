@@ -2,8 +2,7 @@
 
 **Pacecar** is a lightweight, always-on-top system performance overlay built with **Rust** and **egui**. It provides real-time CPU, RAM, GPU, network, and disk I/O metrics in a compact, modern dashboard—similar to Windows Task Manager's Performance tab but as a floating overlay.
 
-![demo](https://github.com/user-attachments/assets/22632cc8-8842-433f-969b-964ccd3a0077)
-
+![demo](./demo.gif)
 
 Designed for minimal overhead and a polished aesthetic, Pacecar aims to keep you informed about your system's health without getting in your way.
 
@@ -36,20 +35,34 @@ Designed for minimal overhead and a polished aesthetic, Pacecar aims to keep you
 
 2. **Run in development mode**:
    ```bash
-   cargo run
+   cargo run --features nvidia,hwmon,uac
    ```
 
 3. **Build and run for production**:
    For the best performance and lowest memory footprint, use the release profile:
    ```bash
-   cargo run --release --features nvidia
+   cargo run --release --features nvidia,hwmon,uac
    ```
 
-### Features 
+### Features
 
-`--features nvidia` is required as NVIDIA locks their GPU telemetry behind a proprietary library (NVML) that ships with their driver. There's no way to query NVIDIA GPU usage, temperature, or VRAM through standard Windows APIs. They deliberately don't expose that data through D3DKMT's statistics interfaces.
+| Feature | Flag | What it enables |
+|---------|------|-----------------|
+| `nvidia` | `--features nvidia` | NVIDIA GPU metrics via NVML (ships with the driver). AMD/Intel GPUs work out of the box via D3DKMT. |
+| `hwmon` | `--features hwmon` | CPU temperature via [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor). Requires the native shim DLL (see below). |
 
-AMD and Intel GPUs play nicely with the Windows kernel's built-in GPU management layer (D3DKMT/WDDM), so their usage and VRAM stats are available through the same OS-level API that Task Manager uses. No vendor-specific SDK needed.
+#### CPU Temperature (hwmon)
+
+Windows doesn't expose CPU temperature through standard APIs. The `hwmon` feature loads a small native DLL built from `hwmon-shim/` that wraps LibreHardwareMonitorLib. If the DLL isn't present the app still runs — temperature simply shows as unavailable.
+
+**To build the shim you need [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0):**
+
+```bash
+cd hwmon-shim
+dotnet publish -c Release -r win-x64
+```
+
+Copy the resulting `hwmon-shim.dll` from `hwmon-shim/bin/Release/net8.0/win-x64/publish/` next to the pacecar executable, then run with `--features hwmon`. Reading CPU temperature requires **running as Administrator**.
 
 ## 🛠️ Development
 
@@ -71,4 +84,3 @@ cargo test
 
 ## 📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.
-

@@ -132,21 +132,20 @@ impl<'a> Widget for Sparkline<'a> {
                 let n = self.history.len();
                 let (y_min, y_max) = self.range;
 
-                // Stack-allocated buffer: max SPARKLINE_CAPACITY points + 2 for fill polygon
-                let mut buf = [Pos2::ZERO; SPARKLINE_CAPACITY + 2];
+                // Build line points (supports arbitrary-length data)
+                let mut line_points = Vec::with_capacity(n);
                 for (i, &val) in self.history.iter().enumerate() {
                     let x = rect.left()
                         + (i as f32 / (n - 1) as f32) * rect.width();
                     let y = scale_y(val, y_min, y_max, rect.top(), rect.bottom());
-                    buf[i] = Pos2::new(x, y);
+                    line_points.push(Pos2::new(x, y));
                 }
 
-                // Line (copy points before extending buffer for fill)
-                let line_points = buf[..n].to_vec();
-
                 // Filled area under the line (lower opacity)
-                buf[n] = Pos2::new(rect.right(), rect.bottom());
-                buf[n + 1] = Pos2::new(rect.left(), rect.bottom());
+                let mut fill_points = Vec::with_capacity(n + 2);
+                fill_points.extend_from_slice(&line_points);
+                fill_points.push(Pos2::new(rect.right(), rect.bottom()));
+                fill_points.push(Pos2::new(rect.left(), rect.bottom()));
                 let fill_color = Color32::from_rgba_unmultiplied(
                     self.color.r(),
                     self.color.g(),
@@ -154,7 +153,7 @@ impl<'a> Widget for Sparkline<'a> {
                     30,
                 );
                 painter.add(egui::Shape::convex_polygon(
-                    buf[..n + 2].to_vec(),
+                    fill_points,
                     fill_color,
                     Stroke::NONE,
                 ));

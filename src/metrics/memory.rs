@@ -1,11 +1,12 @@
 use sysinfo::System;
 
-/// RAM metrics: used/total bytes and usage percentage.
+/// RAM metrics: used/total bytes and usage percentage, with optional temperature.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct MemoryMetrics {
     pub used_bytes: u64,
     pub total_bytes: u64,
     pub usage_percent: f32,
+    pub temperature_celsius: Option<f32>,
 }
 
 /// Collect memory metrics from a `sysinfo::System` instance.
@@ -26,6 +27,7 @@ pub fn collect_memory(system: &System) -> MemoryMetrics {
         used_bytes,
         total_bytes,
         usage_percent,
+        temperature_celsius: None,
     }
 }
 
@@ -54,6 +56,7 @@ mod tests {
             used_bytes: 8_000_000_000,
             total_bytes: 16_000_000_000,
             usage_percent: (8_000_000_000u64 as f64 / 16_000_000_000u64 as f64 * 100.0) as f32,
+            ..Default::default()
         };
         assert!((metrics.usage_percent - 50.0).abs() < f32::EPSILON);
     }
@@ -65,6 +68,7 @@ mod tests {
             used_bytes: 0,
             total_bytes: 0,
             usage_percent: if 0u64 == 0 { 0.0 } else { unreachable!() },
+            ..Default::default()
         };
         assert_eq!(metrics.usage_percent, 0.0);
     }
@@ -88,6 +92,7 @@ mod tests {
         assert_eq!(m.used_bytes, 0);
         assert_eq!(m.total_bytes, 0);
         assert_eq!(m.usage_percent, 0.0);
+        assert_eq!(m.temperature_celsius, None);
     }
 }
 

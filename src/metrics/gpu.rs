@@ -8,6 +8,8 @@ pub struct GpuMetrics {
     pub temperature_celsius: f32,
     pub vram_used_bytes: u64,
     pub vram_total_bytes: u64,
+    /// GPU fan speed as a percentage (0–100). Only available via NVML.
+    pub fan_speed_percent: Option<f32>,
 }
 
 /// Trait abstracting GPU queries for testability.
@@ -130,11 +132,14 @@ mod nvml_impl {
                 .map(|m| (m.used, m.total))
                 .unwrap_or((0, 0));
 
+            let fan_speed_percent = device.fan_speed(0).ok().map(|s| s as f32);
+
             Some(GpuMetrics {
                 usage_percent,
                 temperature_celsius,
                 vram_used_bytes,
                 vram_total_bytes,
+                fan_speed_percent,
             })
         }
     }
@@ -169,6 +174,7 @@ mod tests {
             temperature_celsius: 68.0,
             vram_used_bytes: 4_000_000_000,
             vram_total_bytes: 8_000_000_000,
+            fan_speed_percent: None,
         };
         let expected_clone = expected;
 
@@ -190,6 +196,7 @@ mod tests {
                 temperature_celsius: 0.0, // temp query failed
                 vram_used_bytes: 0,       // memory query failed
                 vram_total_bytes: 0,
+                fan_speed_percent: None,
             })
         });
 

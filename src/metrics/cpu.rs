@@ -1,11 +1,12 @@
 use crate::config::CpuSelection;
 use sysinfo::System;
 
-/// CPU metrics: total usage and frequency.
+/// CPU metrics: total usage, frequency, and optional temperature.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CpuMetrics {
     pub total_usage: f32,
     pub frequency_ghz: f32,
+    pub temperature_celsius: Option<f32>,
 }
 
 /// Collect CPU metrics from a `sysinfo::System` instance.
@@ -15,7 +16,7 @@ pub struct CpuMetrics {
 /// very first tick, `sysinfo` returns 0% for all CPUs — this is expected and
 /// the caller should handle it (e.g., by discarding the first snapshot or
 /// displaying a "warming up" state).
-pub fn collect_cpu(system: &System) -> CpuMetrics {
+pub fn collect_cpu(system: &System, cpu_temp: Option<f32>) -> CpuMetrics {
     let total_usage = system.global_cpu_usage();
 
     let cpus = system.cpus();
@@ -28,6 +29,7 @@ pub fn collect_cpu(system: &System) -> CpuMetrics {
     CpuMetrics {
         total_usage,
         frequency_ghz,
+        temperature_celsius: cpu_temp,
     }
 }
 
@@ -36,7 +38,7 @@ pub fn collect_cpu(system: &System) -> CpuMetrics {
 /// If `selection` is `Aggregate`, uses global CPU usage. If `Core(n)`,
 /// uses the usage of core `n`. Falls back to aggregate if the core index
 /// is out of range.
-pub fn collect_cpu_selected(system: &System, selection: &CpuSelection) -> CpuMetrics {
+pub fn collect_cpu_selected(system: &System, selection: &CpuSelection, cpu_temp: Option<f32>) -> CpuMetrics {
     let total_usage = match selection {
         CpuSelection::Aggregate => system.global_cpu_usage(),
         CpuSelection::Core(idx) => {
@@ -54,6 +56,7 @@ pub fn collect_cpu_selected(system: &System, selection: &CpuSelection) -> CpuMet
     CpuMetrics {
         total_usage,
         frequency_ghz,
+        temperature_celsius: cpu_temp,
     }
 }
 
@@ -254,7 +257,7 @@ mod tests {
     fn collect_cpu_returns_valid_struct() {
         let mut system = System::new();
         system.refresh_cpu_all();
-        let metrics = collect_cpu(&system);
+        let metrics = collect_cpu(&system, None);
 
         // First tick may return 0 or an inaccurate value — just check it's in range.
         assert!(
@@ -273,7 +276,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(250));
         system.refresh_cpu_all();
 
-        let metrics = collect_cpu(&system);
+        let metrics = collect_cpu(&system, None);
 
         // After warmup, total_usage should be in [0, 100].
         assert!(
@@ -308,6 +311,7 @@ mod proptests {
             let metrics = CpuMetrics {
                 total_usage: total,
                 frequency_ghz: freq,
+                temperature_celsius: None,
             };
             prop_assert!((0.0..=100.0).contains(&metrics.total_usage));
             prop_assert!(metrics.frequency_ghz >= 0.0);

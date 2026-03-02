@@ -2,7 +2,7 @@
 
 use eframe::egui;
 
-use crate::config::{Config, CpuSelection, DeviceFilter, GpuSelection, OverlayMode, Visualization};
+use crate::config::{Config, CpuSelection, DeviceFilter, DiskTempMode, FanSpeedMode, GpuSelection, MainboardTempMode, OverlayMode, Visualization};
 use crate::metrics::discovery::AvailableDevices;
 
 /// The allowed polling interval presets in milliseconds.
@@ -278,6 +278,14 @@ pub fn show_settings(
 
                         ui.add_space(4.0);
 
+                        // --- CPU Temperature ---
+                        changed |= settings_section(ui, "CPU Temperature", |ui| {
+                            ui.checkbox(&mut config.show_cpu_temperature, "Show CPU temperature")
+                                .changed()
+                        });
+
+                        ui.add_space(4.0);
+
                         // --- Network Interface ---
                         changed |= settings_section(ui, "Network Interface", |ui| {
                             let current_label =
@@ -364,6 +372,247 @@ pub fn show_settings(
                             section_changed
                         });
 
+                        ui.add_space(4.0);
+
+                        // --- Disk Temperature ---
+                        changed |= settings_section(ui, "Disk Temperature", |ui| {
+                            let mut section_changed = false;
+                            if ui.checkbox(&mut config.show_disk_temperature, "Show disk temperature")
+                                .changed()
+                            {
+                                section_changed = true;
+                            }
+                            if config.show_disk_temperature {
+                                ui.add_space(4.0);
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 16.0;
+                                    if ui
+                                        .radio_value(
+                                            &mut config.disk_temp_mode,
+                                            DiskTempMode::SelectedDisk,
+                                            "Selected Disk",
+                                        )
+                                        .changed()
+                                    {
+                                        section_changed = true;
+                                    }
+                                    if ui
+                                        .radio_value(
+                                            &mut config.disk_temp_mode,
+                                            DiskTempMode::Highest,
+                                            "Highest",
+                                        )
+                                        .changed()
+                                    {
+                                        section_changed = true;
+                                    }
+                                    if ui
+                                        .radio_value(
+                                            &mut config.disk_temp_mode,
+                                            DiskTempMode::Average,
+                                            "Average",
+                                        )
+                                        .changed()
+                                    {
+                                        section_changed = true;
+                                    }
+                                });
+                            }
+                            section_changed
+                        });
+
+                        ui.add_space(4.0);
+
+                        // --- Fan Speed ---
+                        changed |= settings_section(ui, "Fan Speed", |ui| {
+                            let mut section_changed = false;
+                            if ui.checkbox(&mut config.show_fan_speed, "Show fan speed")
+                                .changed()
+                            {
+                                section_changed = true;
+                            }
+                            if config.show_fan_speed {
+                                ui.add_space(4.0);
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 16.0;
+                                    if ui
+                                        .radio_value(
+                                            &mut config.fan_speed_mode,
+                                            FanSpeedMode::Highest,
+                                            "Highest",
+                                        )
+                                        .changed()
+                                    {
+                                        section_changed = true;
+                                    }
+                                    if ui
+                                        .radio_value(
+                                            &mut config.fan_speed_mode,
+                                            FanSpeedMode::Average,
+                                            "Average",
+                                        )
+                                        .changed()
+                                    {
+                                        section_changed = true;
+                                    }
+                                });
+                            }
+                            section_changed
+                        });
+
+                        ui.add_space(4.0);
+
+                        // --- RAM Temperature ---
+                        changed |= settings_section(ui, "RAM Temperature", |ui| {
+                            ui.checkbox(&mut config.show_ram_temperature, "Show RAM temperature")
+                                .changed()
+                        });
+
+                        ui.add_space(4.0);
+
+                        // --- CPU Fan Speed ---
+                        changed |= settings_section(ui, "CPU Fan Speed", |ui| {
+                            ui.checkbox(&mut config.show_cpu_fan_speed, "Show CPU fan speed")
+                                .changed()
+                        });
+
+                        ui.add_space(4.0);
+
+                        // --- GPU Fan Speed ---
+                        changed |= settings_section(ui, "GPU Fan Speed", |ui| {
+                            ui.checkbox(&mut config.show_gpu_fan_speed, "Show GPU fan speed")
+                                .changed()
+                        });
+
+                        ui.add_space(4.0);
+
+                        // --- Mainboard Temperature ---
+                        changed |= settings_section(ui, "Mainboard Temperature", |ui| {
+                            let mut section_changed = false;
+                            if ui.checkbox(&mut config.show_mainboard_temp, "Show mainboard temperature")
+                                .changed()
+                            {
+                                section_changed = true;
+                            }
+                            if config.show_mainboard_temp {
+                                ui.add_space(4.0);
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 16.0;
+                                    if ui
+                                        .radio_value(
+                                            &mut config.mainboard_temp_mode,
+                                            MainboardTempMode::Highest,
+                                            "Highest",
+                                        )
+                                        .changed()
+                                    {
+                                        section_changed = true;
+                                    }
+                                    if ui
+                                        .radio_value(
+                                            &mut config.mainboard_temp_mode,
+                                            MainboardTempMode::Average,
+                                            "Average",
+                                        )
+                                        .changed()
+                                    {
+                                        section_changed = true;
+                                    }
+                                });
+                            }
+                            section_changed
+                        });
+
+                        ui.add_space(8.0);
+
+                        // --- Tile Visibility Header ---
+                        ui.label(
+                            egui::RichText::new("Tile Visibility")
+                                .size(16.0)
+                                .color(egui::Color32::from_gray(220))
+                                .strong(),
+                        );
+                        ui.add_space(4.0);
+
+                        changed |= settings_section(ui, "Show / Hide Tiles", |ui| {
+                            let mut section_changed = false;
+                            section_changed |= ui.checkbox(&mut config.show_cpu, "CPU").changed();
+                            section_changed |= ui.checkbox(&mut config.show_ram, "RAM").changed();
+                            section_changed |= ui.checkbox(&mut config.show_gpu, "GPU").changed();
+                            section_changed |= ui.checkbox(&mut config.show_network, "Network").changed();
+                            section_changed |= ui.checkbox(&mut config.show_disk, "Disk I/O").changed();
+                            section_changed |= ui.checkbox(&mut config.show_ping, "Ping").changed();
+                            section_changed
+                        });
+
+                        ui.add_space(4.0);
+
+                        // --- Display Options ---
+                        changed |= settings_section(ui, "Display Options", |ui| {
+                            let mut section_changed = false;
+                            section_changed |= ui.checkbox(&mut config.show_graphs, "Show graphs / gauges").changed();
+                            section_changed |= ui.checkbox(&mut config.show_percentage, "Show percentage value").changed();
+                            section_changed |= ui.checkbox(&mut config.show_secondary, "Show secondary info").changed();
+                            section_changed |= ui.checkbox(&mut config.show_tertiary, "Show tertiary info (temps, VRAM)").changed();
+                            section_changed |= ui.checkbox(&mut config.show_mini_sparklines, "Show mini sparklines on tiles").changed();
+                            section_changed
+                        });
+
+                        ui.add_space(4.0);
+
+                        // --- History Retention ---
+                        changed |= settings_section(ui, "History Retention", |ui| {
+                            let current_label = format!("{} min", config.history_retention_minutes);
+                            let mut section_changed = false;
+                            ui.horizontal(|ui| {
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        egui::ComboBox::from_id_salt("history_retention_settings")
+                                            .selected_text(&current_label)
+                                            .width(100.0)
+                                            .show_ui(ui, |ui| {
+                                                for &mins in &[1u32, 5, 10, 15, 30, 60, 120] {
+                                                    let label = format!("{mins} min");
+                                                    if ui
+                                                        .selectable_value(
+                                                            &mut config.history_retention_minutes,
+                                                            mins,
+                                                            label,
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        section_changed = true;
+                                                    }
+                                                }
+                                            });
+                                    },
+                                );
+                            });
+                            section_changed
+                        });
+
+                        ui.add_space(8.0);
+
+                        // --- Network Settings Header ---
+                        ui.label(
+                            egui::RichText::new("Network")
+                                .size(16.0)
+                                .color(egui::Color32::from_gray(220))
+                                .strong(),
+                        );
+                        ui.add_space(4.0);
+
+                        // --- Ping Target ---
+                        changed |= settings_section(ui, "Ping Target", |ui| {
+                            let resp = ui.add(
+                                egui::TextEdit::singleline(&mut config.ping_target)
+                                    .desired_width(160.0)
+                                    .hint_text("e.g. 8.8.8.8"),
+                            );
+                            resp.changed()
+                        });
+
                         ui.add_space(12.0);
 
                         // --- Reset to Defaults ---
@@ -386,6 +635,30 @@ pub fn show_settings(
                                 config.cpu_selection = defaults.cpu_selection;
                                 config.network_interface = defaults.network_interface;
                                 config.disk_device = defaults.disk_device;
+                                config.ping_target = defaults.ping_target;
+                                config.show_cpu_temperature = defaults.show_cpu_temperature;
+                                config.show_disk_temperature = defaults.show_disk_temperature;
+                                config.disk_temp_mode = defaults.disk_temp_mode;
+                                config.show_fan_speed = defaults.show_fan_speed;
+                                config.fan_speed_mode = defaults.fan_speed_mode;
+                                config.show_ram_temperature = defaults.show_ram_temperature;
+                                config.show_cpu_fan_speed = defaults.show_cpu_fan_speed;
+                                config.show_gpu_fan_speed = defaults.show_gpu_fan_speed;
+                                config.show_mainboard_temp = defaults.show_mainboard_temp;
+                                config.mainboard_temp_mode = defaults.mainboard_temp_mode;
+                                config.show_cpu = defaults.show_cpu;
+                                config.show_ram = defaults.show_ram;
+                                config.show_gpu = defaults.show_gpu;
+                                config.show_network = defaults.show_network;
+                                config.show_disk = defaults.show_disk;
+                                config.show_ping = defaults.show_ping;
+                                config.show_graphs = defaults.show_graphs;
+                                config.show_percentage = defaults.show_percentage;
+                                config.show_secondary = defaults.show_secondary;
+                                config.show_tertiary = defaults.show_tertiary;
+                                config.layout_preset = defaults.layout_preset;
+                                config.show_mini_sparklines = defaults.show_mini_sparklines;
+                                config.history_retention_minutes = defaults.history_retention_minutes;
                                 changed = true;
                             }
                         });
@@ -462,7 +735,7 @@ fn settings_section(
 }
 
 /// Apply dark visuals to the settings viewport.
-fn configure_settings_visuals(ctx: &egui::Context) {
+pub(crate) fn configure_settings_visuals(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::dark();
     visuals.panel_fill = egui::Color32::from_rgb(24, 24, 28);
     visuals.window_fill = egui::Color32::from_rgb(24, 24, 28);
@@ -513,6 +786,7 @@ mod tests {
             cpu_selection: CpuSelection::Core(3),
             network_interface: DeviceFilter::Named("eth0".to_string()),
             disk_device: DeviceFilter::Named("C:\\".to_string()),
+            ping_target: "1.1.1.1".to_string(),
             ..Config::default()
         };
 
@@ -527,9 +801,33 @@ mod tests {
         config.cpu_selection = defaults.cpu_selection;
         config.network_interface = defaults.network_interface;
         config.disk_device = defaults.disk_device;
+        config.ping_target = defaults.ping_target;
+        config.show_cpu_temperature = defaults.show_cpu_temperature;
+        config.show_disk_temperature = defaults.show_disk_temperature;
+        config.disk_temp_mode = defaults.disk_temp_mode;
+        config.show_fan_speed = defaults.show_fan_speed;
+        config.fan_speed_mode = defaults.fan_speed_mode;
+        config.show_ram_temperature = defaults.show_ram_temperature;
+        config.show_cpu_fan_speed = defaults.show_cpu_fan_speed;
+        config.show_gpu_fan_speed = defaults.show_gpu_fan_speed;
+        config.show_mainboard_temp = defaults.show_mainboard_temp;
+        config.mainboard_temp_mode = defaults.mainboard_temp_mode;
+        config.show_cpu = defaults.show_cpu;
+        config.show_ram = defaults.show_ram;
+        config.show_gpu = defaults.show_gpu;
+        config.show_network = defaults.show_network;
+        config.show_disk = defaults.show_disk;
+        config.show_ping = defaults.show_ping;
+        config.show_graphs = defaults.show_graphs;
+        config.show_percentage = defaults.show_percentage;
+        config.show_secondary = defaults.show_secondary;
+        config.show_tertiary = defaults.show_tertiary;
+        config.layout_preset = defaults.layout_preset;
+        config.show_mini_sparklines = defaults.show_mini_sparklines;
+        config.history_retention_minutes = defaults.history_retention_minutes;
 
         assert_eq!(config.polling_interval_ms, 1000);
-        assert_eq!(config.transparency, 0.85);
+        assert_eq!(config.transparency, 0.65);
         assert_eq!(config.visualization, Visualization::Gauges);
         assert_eq!(config.overlay_mode, OverlayMode::Interactive);
         assert_eq!(config.hotkey, "Ctrl+Shift+P");
@@ -537,6 +835,16 @@ mod tests {
         assert_eq!(config.cpu_selection, CpuSelection::Aggregate);
         assert_eq!(config.network_interface, DeviceFilter::All);
         assert_eq!(config.disk_device, DeviceFilter::All);
+        assert_eq!(config.ping_target, "8.8.8.8");
+        assert_eq!(config.show_cpu_temperature, true);
+        assert_eq!(config.show_disk_temperature, true);
+        assert_eq!(config.disk_temp_mode, DiskTempMode::SelectedDisk);
+        assert_eq!(config.show_fan_speed, true);
+        assert_eq!(config.fan_speed_mode, FanSpeedMode::Highest);
+        assert_eq!(config.show_ram_temperature, true);
+        assert_eq!(config.show_cpu_fan_speed, true);
+        assert_eq!(config.show_mainboard_temp, true);
+        assert_eq!(config.mainboard_temp_mode, MainboardTempMode::Highest);
     }
 
     #[test]

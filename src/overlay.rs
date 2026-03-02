@@ -159,7 +159,7 @@ mod tests {
         // Inner size should match config
         assert_eq!(
             vp.inner_size,
-            Some(egui::vec2(400.0, 360.0))
+            Some(egui::vec2(130.0, 800.0))
         );
         // No position set when config has None
         assert!(vp.position.is_none());

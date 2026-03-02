@@ -306,6 +306,7 @@ impl GpuProvider for D3dkmtGpuProvider {
             temperature_celsius: 0.0, // Not available via D3DKMT
             vram_used_bytes,
             vram_total_bytes,
+            fan_speed_percent: None, // Not available via D3DKMT
         })
     }
 }

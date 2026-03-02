@@ -7,6 +7,7 @@ use std::time::Instant;
 pub struct DiskMetrics {
     pub read_bytes_per_sec: u64,
     pub write_bytes_per_sec: u64,
+    pub temperature_celsius: Option<f32>,
 }
 
 /// State carried between ticks to compute speed deltas.
@@ -60,6 +61,7 @@ pub fn collect_disk(
                 DiskMetrics {
                     read_bytes_per_sec: (read_delta as f64 / elapsed_secs) as u64,
                     write_bytes_per_sec: (write_delta as f64 / elapsed_secs) as u64,
+                    temperature_celsius: None,
                 }
             }
         }

@@ -24,6 +24,8 @@ pub struct MetricPanel<'a> {
     pub secondary_value: Option<&'a str>,
     /// Optional tertiary value ("4.3/8 GB" VRAM, etc.).
     pub tertiary_value: Option<&'a str>,
+    /// Optional quaternary value (e.g. CPU fan RPM on its own line).
+    pub quaternary_value: Option<&'a str>,
     /// Normalized value (0.0–1.0) for gauge mode. `None` for metrics
     /// without a natural percentage (Network, Disk).
     pub gauge_value: Option<f32>,
@@ -37,6 +39,10 @@ pub struct MetricPanel<'a> {
     pub visualization: Visualization,
     /// Available width for this panel (used for responsive sizing).
     pub panel_width: f32,
+    /// Optional mini sparkline data (shown below tile content).
+    pub mini_sparkline: Option<&'a [f32]>,
+    /// Y-axis range for the mini sparkline.
+    pub mini_sparkline_range: (f32, f32),
 }
 
 impl<'a> MetricPanel<'a> {
@@ -46,12 +52,15 @@ impl<'a> MetricPanel<'a> {
             primary_value,
             secondary_value: None,
             tertiary_value: None,
+            quaternary_value: None,
             gauge_value: None,
             sparkline_history: None,
             sparkline_range: (0.0, 100.0),
             color,
             visualization: Visualization::Gauges,
             panel_width: 140.0,
+            mini_sparkline: None,
+            mini_sparkline_range: (0.0, 100.0),
         }
     }
 
@@ -62,6 +71,11 @@ impl<'a> MetricPanel<'a> {
 
     pub fn tertiary_value(mut self, value: &'a str) -> Self {
         self.tertiary_value = Some(value);
+        self
+    }
+
+    pub fn quaternary_value(mut self, value: &'a str) -> Self {
+        self.quaternary_value = Some(value);
         self
     }
 
@@ -83,6 +97,12 @@ impl<'a> MetricPanel<'a> {
 
     pub fn visualization(mut self, vis: Visualization) -> Self {
         self.visualization = vis;
+        self
+    }
+
+    pub fn mini_sparkline(mut self, data: &'a [f32], range: (f32, f32)) -> Self {
+        self.mini_sparkline = Some(data);
+        self.mini_sparkline_range = range;
         self
     }
 
@@ -154,7 +174,8 @@ impl<'a> Widget for MetricPanel<'a> {
 
                 // Set minimum height to prevent height jitter
                 let vis_branch = self.vis_branch();
-                let min_height = match vis_branch {
+                let mini_extra = if self.mini_sparkline.is_some() { 16.0 } else { 0.0 };
+                let min_height = mini_extra + match vis_branch {
                     VisBranch::TextOnly => {
                         // label + primary + secondary + spacing
                         label_size + primary_size + secondary_size + 16.0
@@ -234,6 +255,34 @@ impl<'a> Widget for MetricPanel<'a> {
                                 .size(secondary_size)
                                 .monospace(),
                         ).wrap());
+                    }
+
+                    // Quaternary value (small, dimmed, wrapping)
+                    if let Some(quaternary) = self.quaternary_value {
+                        ui.add(egui::Label::new(
+                            egui::RichText::new(quaternary)
+                                .color(Color32::from_gray(160))
+                                .size(secondary_size)
+                                .monospace(),
+                        ).wrap());
+                    }
+
+                    // Mini sparkline (small chart below tile content)
+                    if let Some(data) = self.mini_sparkline {
+                        if data.len() >= 2 {
+                            let dimmed = Color32::from_rgba_unmultiplied(
+                                self.color.r(),
+                                self.color.g(),
+                                self.color.b(),
+                                140,
+                            );
+                            ui.add(Sparkline::new(
+                                data,
+                                dimmed,
+                                Vec2::new(usable_width.clamp(40.0, 120.0), 12.0),
+                                self.mini_sparkline_range,
+                            ));
+                        }
                     }
                 });
             })

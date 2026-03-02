@@ -36,6 +36,10 @@ fn main() -> eframe::Result {
     // Discover available hardware devices (GPUs, CPU cores, NICs, disks).
     let available_devices = discover_devices();
 
+    // Ensure the PawnIO kernel driver is installed before LHWM initializes.
+    #[cfg(feature = "hwmon")]
+    pacecar::metrics::hwmon::ensure_pawnio_driver();
+
     // Create the shared collector config for device selection.
     let shared_collector_config = Arc::new(Mutex::new(CollectorConfig::from_config(&config)));
 
