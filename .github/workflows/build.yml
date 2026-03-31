@@ -1,0 +1,71 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --features nvidia,hwmon,uac
+
+      - name: Build release
+        run: cargo build --release --features nvidia,hwmon,uac
+
+      - name: Verify build outputs
+        shell: pwsh
+        run: |
+          $files = @("target\release\pacecar.exe", "target\release\hwmon-shim.dll", "target\release\install-pawnio.ps1")
+          foreach ($f in $files) {
+            if (!(Test-Path $f)) { throw "$f not found" }
+          }
+          Get-ChildItem $files | Format-Table Name, Length
+
+      - name: Extract version from Cargo.toml
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.+)"' | ForEach-Object { $_.Matches.Groups[1].Value })
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "Detected version: $version"
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=${{ steps.version.outputs.VERSION }} installer\pacecar.iss
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pacecar-installer
+          path: target/installer/pacecar-${{ steps.version.outputs.VERSION }}-setup.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/installer/pacecar-${{ steps.version.outputs.VERSION }}-setup.exe
+          generate_release_notes: true
