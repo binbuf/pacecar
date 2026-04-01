@@ -1,7 +1,10 @@
 using System;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using LibreHardwareMonitor.Hardware;
+
+[assembly: InternalsVisibleTo("hwmon-shim.Tests")]
 
 namespace HwMonShim;
 
@@ -181,9 +184,7 @@ public static class HwMon
             float val = sensor.Value.Value;
             string name = sensor.Name;
 
-            if (name.Contains("Package", StringComparison.OrdinalIgnoreCase)
-                || name.Contains("Tctl", StringComparison.OrdinalIgnoreCase)
-                || name.Contains("Tdie", StringComparison.OrdinalIgnoreCase))
+            if (IsPackageTemp(name))
             {
                 result->PackageTemp = val;
                 continue;
@@ -202,7 +203,28 @@ public static class HwMon
         }
     }
 
-    private static int ExtractCoreIndex(string name)
+    /// <summary>
+    /// Returns true if the sensor name indicates a CPU package temperature
+    /// (Package, Tctl, or Tdie).
+    /// </summary>
+    /// <summary>
+    /// Returns true if the sensor name indicates a RAM/DIMM temperature sensor.
+    /// </summary>
+    internal static bool IsRamSensorName(string name)
+    {
+        return name.Contains("dimm", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("dram", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("memory", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsPackageTemp(string name)
+    {
+        return name.Contains("Package", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Tctl", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Tdie", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static int ExtractCoreIndex(string name)
     {
         int hash = name.LastIndexOf('#');
         if (hash < 0 || hash + 1 >= name.Length) return -1;
@@ -430,8 +452,7 @@ public static class HwMon
                             if (sensor.SensorType != SensorType.Temperature) continue;
                             if (sensor.Value == null || sensor.Value.Value <= 0f) continue;
 
-                            string nameLower = sensor.Name.ToLowerInvariant();
-                            if (nameLower.Contains("dimm") || nameLower.Contains("dram") || nameLower.Contains("memory"))
+                            if (IsRamSensorName(sensor.Name))
                             {
                                 Log($"ram_temp:   found MB sensor: {sensor.Name} = {sensor.Value.Value}");
                                 if (result->Temperature < 0f || sensor.Value.Value > result->Temperature)

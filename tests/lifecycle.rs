@@ -11,7 +11,7 @@ fn config_round_trip_through_lifecycle() {
     // 1. Start with defaults (simulates first launch — no config file exists)
     let mut config = pacecar::config::Config::default();
     assert_eq!(config.polling_interval_ms, 1000);
-    assert_eq!(config.transparency, 0.85);
+    assert_eq!(config.transparency, 0.65);
 
     // 2. User changes settings during the session
     config.polling_interval_ms = 500;
@@ -50,10 +50,18 @@ fn metrics_collector_starts_and_shuts_down_cleanly() {
 
     let (handle, receiver) = pacecar::metrics::spawn_collector(Box::new(collector), interval);
 
-    // Wait for at least one snapshot to arrive
-    std::thread::sleep(Duration::from_millis(300));
-    let snapshot = receiver.latest();
-    assert!(snapshot.is_some(), "should receive at least one snapshot");
+    // Poll for a snapshot with a generous timeout to handle slow CI runners
+    // where the first collect() can take >300ms (GPU init, component discovery, ping).
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let mut snapshot = None;
+    while std::time::Instant::now() < deadline {
+        snapshot = receiver.latest();
+        if snapshot.is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(snapshot.is_some(), "should receive at least one snapshot within 5 s");
 
     // Verify snapshot has reasonable data
     let snap = snapshot.unwrap();

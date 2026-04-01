@@ -25,6 +25,9 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Run .NET tests
+        run: dotnet test hwmon-shim.Tests
+
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
