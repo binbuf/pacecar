@@ -62,6 +62,10 @@
   <ItemGroup>
     <ClInclude Include="include\pacecar\config\Config.h" />
     <ClInclude Include="include\pacecar\core.h" />
+    <ClInclude Include="include\pacecar\metrics\Aggregator.h" />
+    <ClInclude Include="include\pacecar\metrics\IMetricProvider.h" />
+    <ClInclude Include="include\pacecar\metrics\IpcProtocol.h" />
+    <ClInclude Include="include\pacecar\metrics\MetricsSnapshot.h" />
     <ClInclude Include="include\pacecar\util\Format.h" />
     <ClInclude Include="include\pacecar\util\Logger.h" />
     <ClInclude Include="include\pacecar\util\Pdh.h" />
@@ -72,6 +76,8 @@
   <ItemGroup>
     <ClCompile Include="src\config\Config.cpp" />
     <ClCompile Include="src\core.cpp" />
+    <ClCompile Include="src\metrics\Aggregator.cpp" />
+    <ClCompile Include="src\metrics\MetricsSnapshot.cpp" />
     <ClCompile Include="src\util\Format.cpp" />
     <ClCompile Include="src\util\Logger.cpp" />
     <ClCompile Include="src\util\Pdh.cpp" />

@@ -72,8 +72,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="aggregator_test.cpp" />
     <ClCompile Include="config_test.cpp" />
     <ClCompile Include="format_test.cpp" />
+    <ClCompile Include="ipc_protocol_test.cpp" />
     <ClCompile Include="logger_test.cpp" />
     <ClCompile Include="pdh_test.cpp" />
     <ClCompile Include="ring_buffer_test.cpp" />
