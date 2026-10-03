@@ -67,6 +67,7 @@
     <ClInclude Include="include\pacecar\metrics\CpuTimes.h" />
     <ClInclude Include="include\pacecar\metrics\IMetricProvider.h" />
     <ClInclude Include="include\pacecar\metrics\IpcProtocol.h" />
+    <ClInclude Include="include\pacecar\metrics\MemoryProvider.h" />
     <ClInclude Include="include\pacecar\metrics\MetricsSnapshot.h" />
     <ClInclude Include="include\pacecar\util\Format.h" />
     <ClInclude Include="include\pacecar\util\Logger.h" />
@@ -81,6 +82,7 @@
     <ClCompile Include="src\metrics\Aggregator.cpp" />
     <ClCompile Include="src\metrics\CpuProvider.cpp" />
     <ClCompile Include="src\metrics\CpuTimes.cpp" />
+    <ClCompile Include="src\metrics\MemoryProvider.cpp" />
     <ClCompile Include="src\metrics\MetricsSnapshot.cpp" />
     <ClCompile Include="src\util\Format.cpp" />
     <ClCompile Include="src\util\Logger.cpp" />
