@@ -1,5 +1,4 @@
-.claude/
-/target
-*.snap.new
-bin/
-obj/
+legacy/
+research/
+target/
+docs/
