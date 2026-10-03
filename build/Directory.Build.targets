@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Dependent/override MSBuild logic for native C++ projects. Imported explicitly by each .vcxproj
+  after Microsoft.Cpp.targets. Keep project-independent properties in Directory.Build.props.
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!-- vcpkg.targets installs the manifest dependencies and wires include/lib paths + autolink. -->
+  <Import Project="$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.targets"
+          Condition="'$(VcpkgRoot)' != '' and Exists('$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.targets')" />
+
+</Project>

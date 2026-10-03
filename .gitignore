@@ -55,6 +55,16 @@ autovc.h
 *.nupkg
 packages/
 
+# Central MSBuild props/targets live under build/ and must stay tracked. Ignore the contents rather
+# than the directory, because git cannot re-include a file whose parent directory is excluded.
+build/*
+!build/Directory.Build.props
+!build/Directory.Build.targets
+
+# Native build output and the vcpkg manifest install tree
+/out/
+/vcpkg_installed/
+
 # symphony harness (local tool, not tracked)
 .symphony/
 .stop

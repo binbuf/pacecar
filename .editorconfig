@@ -1,0 +1,23 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{cpp,h,hpp,inl,ixx}]
+indent_size = 4
+max_line_length = 100
+
+[*.{json,jsonc,yml,yaml,xml,vcxproj,vcxproj.filters,slnx,props,targets,manifest}]
+indent_size = 2
+
+[*.{ps1,psm1}]
+indent_size = 4
+end_of_line = crlf
+
+[*.md]
+trim_trailing_whitespace = false

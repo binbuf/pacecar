@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Central build settings for every native C++ project in the repo.
+  MSBuild auto-discovery looks for Directory.Build.props next to the project, so this file lives
+  under build/ and is imported explicitly by each .vcxproj. That keeps the .NET helper (task T16)
+  out of these C++/vcpkg/static-CRT conventions by giving it its own helper/Directory.Build.props.
+  Overrides belong in the project; dependent/target logic belongs in Directory.Build.targets.
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <PropertyGroup Label="Repo layout">
+    <RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</RepoRoot>
+    <PacecarCoreIncludeDir>$(RepoRoot)src\Pacecar.Core\include</PacecarCoreIncludeDir>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Output layout">
+    <OutDir>$(RepoRoot)out\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(RepoRoot)out\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Code analysis">
+    <!-- /analyze diagnostics must not break the build; keep them advisory. -->
+    <CodeAnalysisTreatWarningsAsErrors>false</CodeAnalysisTreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Label="vcpkg manifest mode">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+    <VcpkgTriplet Condition="'$(VcpkgTriplet)' == ''">x64-windows-static</VcpkgTriplet>
+    <!-- Set this explicitly: vcpkg.props is imported here, before UseDebugLibraries is defined, so
+         it cannot infer the right debug/release library subdirectory on its own. -->
+    <VcpkgConfiguration Condition="'$(Configuration)' == 'Debug'">Debug</VcpkgConfiguration>
+    <VcpkgConfiguration Condition="'$(Configuration)' == 'Release'">Release</VcpkgConfiguration>
+    <!-- Ignore the per-user Visual Studio vcpkg integration so this repo's explicit import is the
+         only one (otherwise Microsoft.Cpp.Common.props imports the same props a second time). -->
+    <VCPkgLocalAppDataDisabled>true</VCPkgLocalAppDataDisabled>
+    <!-- VCPKG_ROOT when the developer set it; otherwise use the copy bundled with Visual Studio. -->
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == '' and '$(VCPKG_ROOT)' != ''">$(VCPKG_ROOT)</VcpkgRoot>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == '' and Exists('$(VCTargetsPath)..\..\..\VC\vcpkg\scripts\buildsystems\msbuild\vcpkg.props')">$([System.IO.Path]::GetFullPath('$(VCTargetsPath)..\..\..\VC\vcpkg'))</VcpkgRoot>
+  </PropertyGroup>
+
+  <!-- Shared compile settings. Projects may override any of these in their own ItemDefinitionGroup. -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <WarningLevel>Level4</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <SDLCheck>true</SDLCheck>
+      <RuntimeLibrary Condition="'$(Configuration)' == 'Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)' == 'Release'">MultiThreaded</RuntimeLibrary>
+      <TreatWarningAsError Condition="'$(Configuration)' == 'Release'">true</TreatWarningAsError>
+      <EnablePREfast Condition="'$(Configuration)' == 'Release'">true</EnablePREfast>
+      <!-- Keep /analyze and warning-as-error diagnostics out of third-party headers (vcpkg marks
+           its include dir as external via ExternalIncludePath). -->
+      <DisableAnalyzeExternal>true</DisableAnalyzeExternal>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <AdditionalIncludeDirectories>$(PacecarCoreIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(PacecarCoreIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+
+  <!-- vcpkg props must be imported before Microsoft.Cpp.props so it can seed the toolchain. -->
+  <Import Project="$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.props"
+          Condition="'$(VcpkgRoot)' != '' and '$(VcpkgPropsImported)' != 'true' and Exists('$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.props')" />
+
+</Project>

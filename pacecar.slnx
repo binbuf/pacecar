@@ -1,7 +1,10 @@
 <Solution>
   <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Release" />
     <Platform Name="x64" />
-    <Platform Name="x86" />
   </Configurations>
-  <Project Path="pacecar/pacecar.vcxproj" />
+  <Project Path="src/Pacecar.Core/Pacecar.Core.vcxproj" />
+  <Project Path="src/Pacecar.Overlay/Pacecar.Overlay.vcxproj" />
+  <Project Path="src/Pacecar.App.Tests/Pacecar.App.Tests.vcxproj" />
 </Solution>

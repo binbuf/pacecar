@@ -4,6 +4,8 @@
 #include "framework.h"
 #include "pacecar.h"
 
+#include "pacecar/core.h"
+
 #define MAX_LOADSTRING 100
 
 // Global Variables:
@@ -24,6 +26,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    // Touch the Core library so the static-library reference is proven at link time.
+    [[maybe_unused]] const std::string_view coreVersion = pacecar::CoreVersion();
 
     // TODO: Place code here.
 

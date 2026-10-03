@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "pacecar",
+  "version-string": "0.1.0",
+  "description": "Native MSVC C++ system-metrics overlay for Windows.",
+  "homepage": "https://github.com/anomalyco/pacecar",
+  "dependencies": [
+    "wil",
+    "nlohmann-json",
+    "gtest"
+  ],
+  "builtin-baseline": "3b156cbdecf72d1032e8e1c80d2de97a0c40a285"
+}

@@ -1,17 +1,27 @@
 #requires -Version 7
-# Independent verification for the symphony harness.
-#
-# Builds the native solution (Release|x64) with the repo's vcpkg manifest and runs the unit-test
-# executable(s). Before the C++ solution is scaffolded (task T01) there is nothing to verify, so the
-# script no-ops successfully. Exits non-zero on any build or test failure.
+<#
+.SYNOPSIS
+  Local (CI-less) build helper for the native Pacecar solution.
+.DESCRIPTION
+  Configures nothing globally: it locates MSBuild and the vcpkg root the same way
+  scripts/verify.ps1 does, builds the .slnx for the requested configuration, and
+  optionally runs the test executables. Use -Clean to wipe the out/ tree first.
+.EXAMPLE
+  pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Configuration Debug
+.EXAMPLE
+  pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Configuration Release -Test
+#>
+[CmdletBinding()]
+param(
+    [ValidateSet('Debug', 'Release')]
+    [string]$Configuration = 'Release',
+    [switch]$Clean,
+    [switch]$Test
+)
+
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $root
-
-if (-not (Test-Path -LiteralPath (Join-Path $root 'src'))) {
-    Write-Host 'verify: src/ not present yet; nothing to build or test.'
-    exit 0
-}
 
 function Get-MSBuild {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -24,7 +34,7 @@ function Get-MSBuild {
     }
     $cmd = Get-Command msbuild -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
-    throw 'verify: MSBuild not found (install the VS C++ workload or put msbuild on PATH).'
+    throw 'build: MSBuild not found (install the VS C++ workload or put msbuild on PATH).'
 }
 
 function Get-VcpkgRoot {
@@ -42,54 +52,53 @@ function Get-VcpkgRoot {
     return $null
 }
 
+if ($Clean) {
+    $out = Join-Path $root 'out'
+    if (Test-Path -LiteralPath $out) {
+        Write-Host "build: removing $out"
+        Remove-Item -LiteralPath $out -Recurse -Force
+    }
+}
+
 $solution = Get-ChildItem -Path $root -Filter '*.slnx' -ErrorAction SilentlyContinue |
     Select-Object -First 1
 if (-not $solution) {
     $solution = Get-ChildItem -Path $root -Filter '*.sln' -ErrorAction SilentlyContinue |
         Select-Object -First 1
 }
-if (-not $solution) {
-    throw 'verify: no .slnx/.sln solution file found.'
-}
+if (-not $solution) { throw 'build: no .slnx/.sln solution file found.' }
 
 $msbuild = Get-MSBuild
 $msbuildArgs = @(
     $solution.FullName
     '/nologo'
     '/m'
-    '/p:Configuration=Release'
+    "/p:Configuration=$Configuration"
     '/p:Platform=x64'
 )
 $vcpkgRoot = Get-VcpkgRoot
 if ($vcpkgRoot) { $msbuildArgs += "/p:VcpkgRoot=$vcpkgRoot" }
 
-Write-Host "verify: building $($solution.Name) (Release|x64)"
+Write-Host "build: $($solution.Name) $Configuration|x64"
 & $msbuild @msbuildArgs
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "verify: build failed with exit code $LASTEXITCODE."
+    Write-Error "build: failed with exit code $LASTEXITCODE."
     exit $LASTEXITCODE
 }
 
-$tests = Get-ChildItem -Path (Join-Path $root 'out') -Recurse -Include '*Tests*.exe', '*Test*.exe' -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -notmatch '\\(obj|vcpkg_installed|\.git)\\' }
-if (-not $tests) {
-    Write-Warning 'verify: build succeeded but no test executable was found.'
-    exit 0
-}
-
-$alreadyRun = @{}
-$failed = $false
-foreach ($test in $tests) {
-    if ($alreadyRun.ContainsKey($test.FullName)) { continue }
-    $alreadyRun[$test.FullName] = $true
-    Write-Host "verify: running $($test.FullName)"
-    & $test.FullName
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "verify: $($test.Name) failed with exit code $LASTEXITCODE."
-        $failed = $true
+if ($Test) {
+    $tests = Get-ChildItem -Path (Join-Path $root 'out') -Recurse -Include '*Tests*.exe', '*Test*.exe' -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '\\(obj|vcpkg_installed|\.git)\\' }
+    if (-not $tests) { throw 'build: no test executable found.' }
+    foreach ($testExe in $tests) {
+        Write-Host "build: running $($testExe.FullName)"
+        & $testExe.FullName
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "build: $($testExe.Name) failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+        }
     }
 }
-if ($failed) { exit 1 }
 
-Write-Host 'verify: ok'
+Write-Host 'build: ok'
 exit 0
