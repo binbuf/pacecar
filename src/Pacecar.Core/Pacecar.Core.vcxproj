@@ -78,6 +78,7 @@
     <ClInclude Include="include\pacecar\metrics\SnapshotCache.h" />
     <ClInclude Include="include\pacecar\metrics\GpuD3dKmtProvider.h" />
     <ClInclude Include="include\pacecar\metrics\GpuPdhProvider.h" />
+    <ClInclude Include="include\pacecar\metrics\GpuVendorProvider.h" />
     <ClInclude Include="include\pacecar\metrics\IMetricProvider.h" />
     <ClInclude Include="include\pacecar\metrics\IpcProtocol.h" />
     <ClInclude Include="include\pacecar\metrics\MemoryProvider.h" />
@@ -119,6 +120,7 @@
     <ClCompile Include="src\metrics\SnapshotCache.cpp" />
     <ClCompile Include="src\metrics\GpuD3dKmtProvider.cpp" />
     <ClCompile Include="src\metrics\GpuPdhProvider.cpp" />
+    <ClCompile Include="src\metrics\GpuVendorProvider.cpp" />
     <ClCompile Include="src\metrics\MemoryProvider.cpp" />
     <ClCompile Include="src\metrics\MetricsSnapshot.cpp" />
     <ClCompile Include="src\metrics\NetworkProvider.cpp" />

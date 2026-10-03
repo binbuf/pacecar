@@ -84,6 +84,7 @@
     <ClCompile Include="disk_provider_test.cpp" />
     <ClCompile Include="format_test.cpp" />
     <ClCompile Include="gpu_provider_test.cpp" />
+    <ClCompile Include="gpu_vendor_provider_test.cpp" />
     <ClCompile Include="ipc_protocol_test.cpp" />
     <ClCompile Include="layout_test.cpp" />
     <ClCompile Include="lifecycle_test.cpp" />

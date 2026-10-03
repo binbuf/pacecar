@@ -109,7 +109,7 @@ void Sampler::BuildProviders(const pacecar::Config& config)
 {
     providerCount_ = 0;
 
-    aggregator_->ReserveProviders(6);
+    aggregator_->ReserveProviders(7);
     aggregator_->AddProvider(std::make_shared<pacecar::metrics::CpuProvider>());
     aggregator_->AddProvider(std::make_shared<pacecar::metrics::MemoryProvider>());
     gpuProvider_ = std::make_shared<pacecar::metrics::GpuPdhProvider>(
@@ -118,6 +118,10 @@ void Sampler::BuildProviders(const pacecar::Config& config)
         config.sensors.gpu_selection);
     gpuProvider_->SetTargetPid(foregroundPid_.load(std::memory_order_relaxed));
     aggregator_->AddProvider(gpuProvider_);
+    // Registered after the PDH provider so vendor values override the baseline within one tick.
+    vendorProvider_ = std::make_shared<pacecar::metrics::GpuVendorProvider>(
+        config.sensors.gpu_selection);
+    aggregator_->AddProvider(vendorProvider_);
     aggregator_->AddProvider(std::make_shared<pacecar::metrics::NetworkProvider>(
         pacecar::metrics::MakeGetIfTable2Source(), pacecar::MakeQpcElapsedClock(),
         config.sensors.nic_selection));
@@ -286,6 +290,16 @@ std::wstring Sampler::Diagnostics() const
     text += ecoQosApplied_ ? L" ecoQos=on" : L" ecoQos=off";
     text += ignoreTimerResolutionApplied_ ? L" ignoreTimerResolution=on"
                                           : L" ignoreTimerResolution=off/unsupported";
+    if (vendorProvider_)
+    {
+        const char* active = vendorProvider_->ActiveVendorName();
+        wchar_t vendorText[64] = {};
+        swprintf_s(vendorText, L" gpuVendor=%hs", active);
+        text += vendorText;
+        text += vendorProvider_->ActiveVendor() != pacecar::metrics::GpuVendorKind::None
+                    ? L" (active)"
+                    : L" (unavailable)";
+    }
     return text;
 }
 } // namespace pacecar::overlay

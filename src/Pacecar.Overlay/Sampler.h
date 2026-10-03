@@ -28,6 +28,7 @@
 #include "pacecar/metrics/Aggregator.h"
 #include "pacecar/metrics/DisplayFrame.h"
 #include "pacecar/metrics/GpuPdhProvider.h"
+#include "pacecar/metrics/GpuVendorProvider.h"
 
 namespace pacecar::overlay
 {
@@ -80,6 +81,7 @@ class Sampler
 
     std::unique_ptr<pacecar::metrics::Aggregator> aggregator_;
     std::shared_ptr<pacecar::metrics::GpuPdhProvider> gpuProvider_;
+    std::shared_ptr<pacecar::metrics::GpuVendorProvider> vendorProvider_;
     std::thread thread_;
 
     mutable std::mutex mutex_;
