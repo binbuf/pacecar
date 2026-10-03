@@ -1,10 +1,8 @@
 <Solution>
   <Configurations>
-    <BuildType Name="Debug" />
-    <BuildType Name="Release" />
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="src/Pacecar.Core/Pacecar.Core.vcxproj" />
-  <Project Path="src/Pacecar.Overlay/Pacecar.Overlay.vcxproj" />
-  <Project Path="src/Pacecar.App.Tests/Pacecar.App.Tests.vcxproj" />
+  <Project Path="src/Pacecar.App.Tests/Pacecar.App.Tests.vcxproj" Id="fbefe939-18bc-40f7-a25e-f870d6e56043" />
+  <Project Path="src/Pacecar.Core/Pacecar.Core.vcxproj" Id="b940e323-d96b-4dcb-9882-af29944a206d" />
+  <Project Path="src/Pacecar.Overlay/Pacecar.Overlay.vcxproj" Id="32d77b94-1bda-4687-ab38-fe368087da82" />
 </Solution>

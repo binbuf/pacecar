@@ -35,7 +35,7 @@
     <VCPkgLocalAppDataDisabled>true</VCPkgLocalAppDataDisabled>
     <!-- VCPKG_ROOT when the developer set it; otherwise use the copy bundled with Visual Studio. -->
     <VcpkgRoot Condition="'$(VcpkgRoot)' == '' and '$(VCPKG_ROOT)' != ''">$(VCPKG_ROOT)</VcpkgRoot>
-    <VcpkgRoot Condition="'$(VcpkgRoot)' == '' and Exists('$(VCTargetsPath)..\..\..\VC\vcpkg\scripts\buildsystems\msbuild\vcpkg.props')">$([System.IO.Path]::GetFullPath('$(VCTargetsPath)..\..\..\VC\vcpkg'))</VcpkgRoot>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == '' and Exists('$(VCTargetsPath)..\..\..\..\VC\vcpkg\scripts\buildsystems\msbuild\vcpkg.props')">$([System.IO.Path]::GetFullPath('$(VCTargetsPath)..\..\..\..\VC\vcpkg'))</VcpkgRoot>
   </PropertyGroup>
 
   <!-- Shared compile settings. Projects may override any of these in their own ItemDefinitionGroup. -->
