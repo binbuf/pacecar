@@ -12,11 +12,14 @@
 //   --no-capture        do not request capture exclusion
 //   --measure[=SECONDS] run visible for SECONDS (default 5), print overhead, then exit
 //   --diagnostics       print the renderer/HDR/capture findings and exit immediately
+//   --position=X,Y,W,H  force the window rectangle (physical pixels) instead of the saved/config
+//                       placement; used by the cross-process click-through probe
 
 #include "framework.h"
 #include "pacecar.h"
 
 #include <cstdio>
+#include <cwchar>
 #include <optional>
 #include <string>
 
@@ -43,6 +46,7 @@ struct CommandLineOptions
     int measureSeconds = 5;
     bool diagnosticsOnly = false;
     std::wstring outputFile{};
+    std::optional<pacecar::MonitorRect> position{};
 };
 
 void EnableConsole()
@@ -119,6 +123,25 @@ CommandLineOptions ParseCommandLine()
         {
             options.outputFile = arg.substr(6);
         }
+        else if (arg.starts_with(L"--position="))
+        {
+            int x = 0;
+            int y = 0;
+            int width = 0;
+            int height = 0;
+            if (swscanf_s(std::wstring(arg.substr(11)).c_str(), L"%d,%d,%d,%d", &x, &y, &width,
+                          &height) == 4 &&
+                width > 0 && height > 0)
+            {
+                pacecar::MonitorRect rect{};
+                rect.x = x;
+                rect.y = y;
+                rect.width = width;
+                rect.height = height;
+                rect.valid = true;
+                options.position = rect;
+            }
+        }
     }
     LocalFree(argv);
     return options;
@@ -155,6 +178,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
             savedRect = rect;
             break;
         }
+    }
+    if (commandLine.position.has_value())
+    {
+        savedRect = commandLine.position;
     }
 
     pacecar::overlay::OverlayOptions options;
