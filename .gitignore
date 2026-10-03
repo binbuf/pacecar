@@ -54,3 +54,7 @@ autovc.h
 # NuGet
 *.nupkg
 packages/
+
+# symphony harness (local tool, not tracked)
+.symphony/
+.stop
