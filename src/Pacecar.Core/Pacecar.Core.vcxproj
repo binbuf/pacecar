@@ -65,6 +65,8 @@
     <ClInclude Include="include\pacecar\metrics\Aggregator.h" />
     <ClInclude Include="include\pacecar\metrics\CpuProvider.h" />
     <ClInclude Include="include\pacecar\metrics\CpuTimes.h" />
+    <ClInclude Include="include\pacecar\metrics\GpuD3dKmtProvider.h" />
+    <ClInclude Include="include\pacecar\metrics\GpuPdhProvider.h" />
     <ClInclude Include="include\pacecar\metrics\IMetricProvider.h" />
     <ClInclude Include="include\pacecar\metrics\IpcProtocol.h" />
     <ClInclude Include="include\pacecar\metrics\MemoryProvider.h" />
@@ -82,6 +84,8 @@
     <ClCompile Include="src\metrics\Aggregator.cpp" />
     <ClCompile Include="src\metrics\CpuProvider.cpp" />
     <ClCompile Include="src\metrics\CpuTimes.cpp" />
+    <ClCompile Include="src\metrics\GpuD3dKmtProvider.cpp" />
+    <ClCompile Include="src\metrics\GpuPdhProvider.cpp" />
     <ClCompile Include="src\metrics\MemoryProvider.cpp" />
     <ClCompile Include="src\metrics\MetricsSnapshot.cpp" />
     <ClCompile Include="src\util\Format.cpp" />
