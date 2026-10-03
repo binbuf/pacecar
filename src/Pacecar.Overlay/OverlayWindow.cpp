@@ -11,8 +11,10 @@
 #include <utility>
 
 #include <shellscalingapi.h>
+#include <windowsx.h>
 
 #include "Widgets/SystemTheme.h"
+#include "pacecar/overlay/Layout.h"
 #include "pacecar/util/Logger.h"
 
 namespace pacecar::overlay
@@ -20,6 +22,9 @@ namespace pacecar::overlay
 namespace
 {
 constexpr wchar_t kWindowClassName[] = L"PacecarOverlayWindow";
+
+// Hit-test border for interactive edge/corner resizing, in DIPs.
+constexpr float kResizeBorderDip = 6.0f;
 
 ATOM g_windowClass = 0;
 
@@ -181,7 +186,10 @@ bool OverlayWindow::CreateWindowForRecipe(OverlayRecipe recipe)
             exStyle |= WS_EX_TRANSPARENT;
         }
     }
-    hwnd_ = CreateWindowExW(exStyle, kWindowClassName, L"Pacecar Overlay", WS_POPUP, CW_USEDEFAULT, 0,
+    // WS_THICKFRAME enables the native sizing loop for the WM_NCHITTEST edge codes; WM_NCCALCSIZE
+    // removes the drawn frame so the panel still fills the whole window.
+    hwnd_ = CreateWindowExW(exStyle, kWindowClassName, L"Pacecar Overlay",
+                            WS_POPUP | WS_THICKFRAME, CW_USEDEFAULT, 0,
                             CW_USEDEFAULT, 0, nullptr, nullptr, instance_, this);
     return hwnd_ != nullptr;
 }
@@ -298,6 +306,19 @@ void OverlayWindow::ApplyCaptureExclusion(bool enabled)
     }
 }
 
+void OverlayWindow::ApplyConfig(const pacecar::Config& config)
+{
+    options_.panelOpacity = config.general.opacity;
+    options_.theme = config.general.theme;
+    if (renderer_ == nullptr)
+    {
+        return;
+    }
+    renderer_->SetTheme(ResolveSystemTheme(options_.theme, options_.panelOpacity));
+    renderer_->SetLayout(LayoutSettingsFromConfig(config));
+    Invalidate();
+}
+
 void OverlayWindow::Invalidate()
 {
     if (renderer_ == nullptr)
@@ -346,6 +367,11 @@ void OverlayWindow::SetCloseCallback(CloseCallback callback)
     closeCallback_ = std::move(callback);
 }
 
+void OverlayWindow::SetCommandCallback(CommandCallback callback)
+{
+    commandCallback_ = std::move(callback);
+}
+
 LRESULT OverlayWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -361,6 +387,13 @@ LRESULT OverlayWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     }
     case WM_MOUSEACTIVATE:
         return MA_NOACTIVATE; // Never steal focus from the app underneath.
+    case WM_NCCALCSIZE:
+        // Remove the WS_THICKFRAME frame; the client area stays the whole window.
+        if (wParam == TRUE)
+        {
+            return 0;
+        }
+        break;
     case WM_NCHITTEST:
         if (renderer_ != nullptr && renderer_->Recipe() == OverlayRecipe::Composition &&
             clickThrough_ &&
@@ -368,7 +401,49 @@ LRESULT OverlayWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         {
             return HTTRANSPARENT;
         }
+        if (!clickThrough_)
+        {
+            return HitTestBorder(lParam);
+        }
         break;
+    case WM_NCRBUTTONUP:
+        if (!clickThrough_ && wParam == HTCAPTION)
+        {
+            const POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ShowContextMenu(point);
+            return 0;
+        }
+        break;
+    case WM_CONTEXTMENU:
+        if (!clickThrough_)
+        {
+            POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (point.x == -1 && point.y == -1)
+            {
+                RECT window{};
+                if (GetWindowRect(hwnd_, &window))
+                {
+                    point.x = window.left + 8;
+                    point.y = window.top + 8;
+                }
+            }
+            ShowContextMenu(point);
+            return 0;
+        }
+        break;
+    case WM_COMMAND:
+        if (HIWORD(wParam) == 0 && IsOverlayCommand(LOWORD(wParam)))
+        {
+            ExecuteCommand(static_cast<OverlayCommand>(LOWORD(wParam)));
+            return 0;
+        }
+        break;
+    case WM_SIZE:
+        if (wParam != SIZE_MINIMIZED)
+        {
+            ResizeRendererToWindow();
+        }
+        return 0;
     case WM_DPICHANGED:
         HandleDpiChanged(wParam, lParam);
         return 0;
@@ -528,6 +603,126 @@ pacecar::MonitorRect OverlayWindow::PlacementFor(
         placement.monitor_id = static_cast<int>(std::distance(monitors_.begin(), it));
     }
     return placement;
+}
+
+LRESULT OverlayWindow::HitTestBorder(LPARAM lParam) const
+{
+    if (hwnd_ == nullptr)
+    {
+        return HTCLIENT;
+    }
+    const POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    RECT window{};
+    if (!GetWindowRect(hwnd_, &window))
+    {
+        return HTCLIENT;
+    }
+    const int border = DipToPixels(kResizeBorderDip, WindowDpi());
+    const bool left = point.x < window.left + border;
+    const bool right = point.x >= window.right - border;
+    const bool top = point.y < window.top + border;
+    const bool bottom = point.y >= window.bottom - border;
+
+    if (top && left)
+    {
+        return HTTOPLEFT;
+    }
+    if (top && right)
+    {
+        return HTTOPRIGHT;
+    }
+    if (bottom && left)
+    {
+        return HTBOTTOMLEFT;
+    }
+    if (bottom && right)
+    {
+        return HTBOTTOMRIGHT;
+    }
+    if (left)
+    {
+        return HTLEFT;
+    }
+    if (right)
+    {
+        return HTRIGHT;
+    }
+    if (top)
+    {
+        return HTTOP;
+    }
+    if (bottom)
+    {
+        return HTBOTTOM;
+    }
+    // Interior: native caption drag (no polling, no SetForegroundWindow).
+    return HTCAPTION;
+}
+
+void OverlayWindow::ShowContextMenu(POINT screenPoint)
+{
+    if (hwnd_ == nullptr)
+    {
+        return;
+    }
+    HMENU menu = CreatePopupMenu();
+    if (menu == nullptr)
+    {
+        return;
+    }
+    for (const OverlayCommand command : kContextMenuCommands)
+    {
+        UINT flags = MF_STRING;
+        if (command == OverlayCommand::Mode && clickThrough_)
+        {
+            flags |= MF_CHECKED;
+        }
+        if (AppendMenuW(menu, flags, static_cast<UINT_PTR>(command), CommandLabel(command)) == FALSE)
+        {
+            DestroyMenu(menu);
+            return;
+        }
+    }
+
+    const UINT chosen =
+        static_cast<UINT>(TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
+                                         screenPoint.x, screenPoint.y, 0, hwnd_, nullptr));
+    DestroyMenu(menu);
+    if (chosen != 0 && IsOverlayCommand(chosen))
+    {
+        ExecuteCommand(static_cast<OverlayCommand>(chosen));
+    }
+}
+
+void OverlayWindow::ExecuteCommand(OverlayCommand command)
+{
+    switch (command)
+    {
+    case OverlayCommand::Mode:
+        ToggleClickThrough();
+        break;
+    case OverlayCommand::Hide:
+        ShowWindow(hwnd_, SW_HIDE);
+        break;
+    case OverlayCommand::Exit:
+        PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+        break;
+    case OverlayCommand::Settings:
+    case OverlayCommand::History:
+    case OverlayCommand::Specs:
+        if (commandCallback_)
+        {
+            commandCallback_(command);
+        }
+        else
+        {
+            LogWarn(L"overlay: Settings/History/Specs windows are not available yet");
+        }
+        break;
+    case OverlayCommand::None:
+    default:
+        break;
+    }
 }
 
 DWORD OverlayWindow::RecipeExtendedStyle(OverlayRecipe recipe) const

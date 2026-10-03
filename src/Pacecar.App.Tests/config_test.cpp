@@ -120,6 +120,7 @@ const char* kDefaultConfigJson = R"JSON({
       "show_primary": true,
       "show_secondary": true,
       "show_tertiary": true,
+      "show_visualization": true,
       "visualization": "gauges",
       "mini_sparklines": false
     },
@@ -128,6 +129,7 @@ const char* kDefaultConfigJson = R"JSON({
       "show_primary": true,
       "show_secondary": true,
       "show_tertiary": true,
+      "show_visualization": true,
       "visualization": "gauges",
       "mini_sparklines": false
     },
@@ -136,6 +138,7 @@ const char* kDefaultConfigJson = R"JSON({
       "show_primary": true,
       "show_secondary": true,
       "show_tertiary": true,
+      "show_visualization": true,
       "visualization": "gauges",
       "mini_sparklines": false
     },
@@ -144,6 +147,7 @@ const char* kDefaultConfigJson = R"JSON({
       "show_primary": true,
       "show_secondary": true,
       "show_tertiary": true,
+      "show_visualization": true,
       "visualization": "gauges",
       "mini_sparklines": false
     },
@@ -152,6 +156,7 @@ const char* kDefaultConfigJson = R"JSON({
       "show_primary": true,
       "show_secondary": true,
       "show_tertiary": true,
+      "show_visualization": true,
       "visualization": "gauges",
       "mini_sparklines": false
     },
@@ -160,9 +165,13 @@ const char* kDefaultConfigJson = R"JSON({
       "show_primary": true,
       "show_secondary": true,
       "show_tertiary": true,
+      "show_visualization": true,
       "visualization": "gauges",
       "mini_sparklines": false
     }
+  },
+  "layout": {
+    "custom_tiles": []
   },
   "sensors": {
     "gpu_selection": "auto",
@@ -277,6 +286,44 @@ TEST(ConfigSerialization, UnknownEnumsFallBack)
     EXPECT_EQ(config.general.theme, Theme::Dark);
     EXPECT_EQ(config.overlay.mode, OverlayMode::Interactive);
     EXPECT_EQ(config.tiles.ram.visualization, Visualization::Gauges);
+}
+
+TEST(ConfigSerialization, CustomLayoutGeometryRoundTrips)
+{
+    Config config = Config::Defaults();
+    config.general.layout = LayoutPreset::Custom;
+    config.layout.custom_tiles.push_back(
+        pacecar::CustomTilePlacement{"cpu", 1.0, 2.0, 120.0, 80.0, true});
+    config.layout.custom_tiles.push_back(
+        pacecar::CustomTilePlacement{"gpu", 130.0, 2.0, 120.0, 80.0, true});
+
+    Config loaded;
+    ASSERT_TRUE(ConfigFromJsonString(ConfigToJsonString(config), loaded));
+    EXPECT_EQ(loaded.general.layout, LayoutPreset::Custom);
+    ASSERT_EQ(loaded.layout.custom_tiles.size(), 2u);
+    EXPECT_EQ(loaded.layout.custom_tiles[0].tile, "cpu");
+    EXPECT_DOUBLE_EQ(loaded.layout.custom_tiles[0].x, 1.0);
+    EXPECT_DOUBLE_EQ(loaded.layout.custom_tiles[1].width, 120.0);
+    EXPECT_TRUE(loaded.layout.custom_tiles[1].valid);
+    EXPECT_EQ(ConfigToJsonString(loaded), ConfigToJsonString(config));
+}
+
+TEST(ConfigSerialization, VisualizationToggleParses)
+{
+    Config config;
+    ASSERT_TRUE(ConfigFromJsonString(R"({"tiles":{"cpu":{"show_visualization":false}}})", config));
+    EXPECT_FALSE(config.tiles.cpu.show_visualization);
+}
+
+TEST(ConfigClamp, CustomGeometryRepaired)
+{
+    Config config;
+    ASSERT_TRUE(ConfigFromJsonString(
+        R"({"layout":{"custom_tiles":[{"tile":"cpu","x":0,"y":0,"width":-5,"height":-9,"valid":true}]}})",
+        config));
+    ASSERT_EQ(config.layout.custom_tiles.size(), 1u);
+    EXPECT_DOUBLE_EQ(config.layout.custom_tiles[0].width, 0.0);
+    EXPECT_DOUBLE_EQ(config.layout.custom_tiles[0].height, 0.0);
 }
 
 TEST(ConfigClamp, Opacity)

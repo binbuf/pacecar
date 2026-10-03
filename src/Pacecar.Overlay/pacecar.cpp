@@ -213,6 +213,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         return 1;
     }
 
+    // Apply the config-driven theme and layout to the live renderer (preset + per-tile/per-field
+    // toggles) without recreating the window.
+    overlay.ApplyConfig(config);
+
     overlay.SetPositionChangedCallback(
         [&config](const pacecar::MonitorRect& rect)
         {

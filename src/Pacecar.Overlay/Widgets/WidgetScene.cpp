@@ -9,17 +9,12 @@ namespace pacecar::overlay
 {
 namespace
 {
-constexpr float kOuterPadding = 8.0f;
-constexpr float kHeaderHeight = 18.0f;
-constexpr float kHeaderBottomGap = 6.0f;
-constexpr float kTileGap = 6.0f;
 constexpr float kCornerRadius = 6.0f;
-constexpr int kColumns = 3;
-constexpr int kRows = 2;
 
+// Placeholder values until T12 binds the aggregator. Labels and families are real so the layout and
+// arrangement can be checked by eye.
 struct DemoTile
 {
-    MetricFamily family;
     const wchar_t* label;
     const wchar_t* primary;
     const wchar_t* secondary;
@@ -27,25 +22,51 @@ struct DemoTile
     double gauge;
 };
 
-constexpr DemoTile kDemoTiles[kColumns * kRows] = {
-    {MetricFamily::Cpu, L"CPU", L"42%", L"3.80 GHz", L"55.0\x00B0"
-                                                       L"C",
-     0.42},
-    {MetricFamily::Ram, L"RAM", L"63%", L"10.1/16 GB", L"42.0\x00B0"
-                                                         L"C",
-     0.63},
-    {MetricFamily::Gpu, L"GPU", L"28%", L"71.0\x00B0"
-                                        L"C",
-     L"4.2/8 GB", 0.28},
-    {MetricFamily::Network, L"Network", L"1.4 MiB/s", L"\x2191"
-                                                      L" 200 KiB  \x2193"
-                                                      L" 1.2 MiB",
-     L"", 0.35},
-    {MetricFamily::Disk, L"Disk", L"45 MiB/s", L"R: 30  W: 15", L"38.0\x00B0"
-                                                                 L"C",
-     0.55},
-    {MetricFamily::Ping, L"Ping", L"12 ms", L"", L"", 0.12},
-};
+const DemoTile& DemoFor(TileId id) noexcept
+{
+    static constexpr DemoTile kCpu{L"CPU", L"42%", L"3.80 GHz", L"55\x00B0"
+                                                                    L"C",
+                                   0.42};
+    static constexpr DemoTile kRam{L"RAM", L"63%", L"10.1/16 GB", L"42\x00B0"
+                                                                  L"C",
+                                   0.63};
+    static constexpr DemoTile kGpu{L"GPU", L"28%", L"71\x00B0"
+                                                      L"C",
+                                   L"4.2/8 GB", 0.28};
+    static constexpr DemoTile kNetwork{L"Network", L"1.4 MiB/s",
+                                       L"\x2191"
+                                       L" 200 KiB  \x2193"
+                                       L" 1.2 MiB",
+                                       L"", 0.35};
+    static constexpr DemoTile kDisk{L"Disk", L"45 MiB/s", L"R: 30  W: 15", L"38\x00B0"
+                                                                          L"C",
+                                    0.55};
+    static constexpr DemoTile kPing{L"Ping", L"12 ms", L"", L"", 0.12};
+    static constexpr DemoTile kFans{L"Fans", L"1200 RPM", L"", L"", 0.4};
+    static constexpr DemoTile kMainboard{L"Board", L"38\x00B0"
+                                                  L"C",
+                                         L"", L"", 0.38};
+    switch (id)
+    {
+    case TileId::Cpu:
+        return kCpu;
+    case TileId::Ram:
+        return kRam;
+    case TileId::Gpu:
+        return kGpu;
+    case TileId::Network:
+        return kNetwork;
+    case TileId::Disk:
+        return kDisk;
+    case TileId::Ping:
+        return kPing;
+    case TileId::Fans:
+        return kFans;
+    case TileId::Mainboard:
+    default:
+        return kMainboard;
+    }
+}
 
 float DemoWave(std::size_t index) noexcept
 {
@@ -127,54 +148,31 @@ void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
     panel_.Draw(target, bounds, kCornerRadius, theme.palette.panelBackground,
                 theme.palette.panelBorder);
 
-    const RectF headerRect{kOuterPadding, kOuterPadding, size.width - kOuterPadding,
-                           kOuterPadding + kHeaderHeight};
+    const RectF headerRect{settings_.panelPadding, settings_.panelPadding,
+                           size.width - settings_.panelPadding,
+                           settings_.panelPadding + settings_.headerHeight};
     header_.Draw(target, text_, styles_, headerRect, L"PACECAR", L"Live", theme);
 
-    const float gridTop = headerRect.bottom + kHeaderBottomGap;
-    const float gridLeft = kOuterPadding;
-    const float gridRight = size.width - kOuterPadding;
-    const float gridBottom = size.height - kOuterPadding;
-    const float gridWidth = gridRight - gridLeft;
-    const float gridHeight = gridBottom - gridTop;
-    if (gridWidth <= kTileGap || gridHeight <= kTileGap)
+    const LayoutResult layout = ComputeLayout(size.width, size.height, settings_);
+    for (std::size_t i = 0; i < layout.count; ++i)
     {
-        return;
-    }
-    const float tileWidth =
-        (gridWidth - kTileGap * static_cast<float>(kColumns - 1)) / static_cast<float>(kColumns);
-    const float tileHeight =
-        (gridHeight - kTileGap * static_cast<float>(kRows - 1)) / static_cast<float>(kRows);
+        const TilePlacement& placement = layout.tiles[i];
+        const DemoTile& demo = DemoFor(placement.id);
 
-    TileFieldVisibility visibility{};
-    visibility.miniSparkline = true;
-
-    for (int i = 0; i < kColumns * kRows; ++i)
-    {
-        const int column = i % kColumns;
-        const int row = i / kColumns;
-        const RectF tileRect{gridLeft + static_cast<float>(column) * (tileWidth + kTileGap),
-                             gridTop + static_cast<float>(row) * (tileHeight + kTileGap),
-                             gridLeft + static_cast<float>(column) * (tileWidth + kTileGap) +
-                                 tileWidth,
-                             gridTop + static_cast<float>(row) * (tileHeight + kTileGap) +
-                                 tileHeight};
-
-        const DemoTile& demo = kDemoTiles[i];
         TileContent content{};
-        content.family = demo.family;
+        content.family = placement.family;
         content.label = demo.label;
         content.primary = demo.primary;
         content.secondary = demo.secondary;
         content.tertiary = demo.tertiary;
         content.gaugeFraction = demo.gauge;
-        content.visualizationIsSparkline = false;
+        content.visualizationIsSparkline =
+            placement.visualization == pacecar::Visualization::Sparklines;
         content.sparkSamples = std::span<const float>(demoHistory_);
         content.sparkMin = 0.0f;
         content.sparkMax = 100.0f;
 
-        tiles_[static_cast<std::size_t>(i)].Draw(target, text_, styles_, tileRect, content,
-                                                 visibility, theme);
+        tiles_[i].Draw(target, text_, styles_, placement.bounds, content, placement.fields, theme);
     }
 }
 

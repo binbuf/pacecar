@@ -99,6 +99,12 @@ class LayeredRenderer final : public IRenderer
         dirty_ = true;
     }
 
+    void SetLayout(const LayoutSettings& layout) override
+    {
+        scene_.SetLayout(layout);
+        dirty_ = true;
+    }
+
     void Invalidate() noexcept override
     {
         dirty_ = true;
@@ -390,6 +396,12 @@ class CompositionRenderer final : public IRenderer
     void SetTheme(const ResolvedTheme& theme) override
     {
         theme_ = theme;
+        dirty_ = true;
+    }
+
+    void SetLayout(const LayoutSettings& layout) override
+    {
+        scene_.SetLayout(layout);
         dirty_ = true;
     }
 

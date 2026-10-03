@@ -98,14 +98,15 @@ struct MonitorRect
 };
 
 // Per-tile visibility and presentation. `show_primary`/`show_secondary`/`show_tertiary` toggle the
-// individual value lines; `visualization` chooses gauges vs sparklines; `mini_sparklines` adds the
-// compact history strip.
+// individual value lines; `show_visualization` toggles the graph/percentage block; `visualization`
+// chooses gauges vs sparklines; `mini_sparklines` adds the compact history strip.
 struct TileConfig
 {
     bool visible = true;
     bool show_primary = true;
     bool show_secondary = true;
     bool show_tertiary = true;
+    bool show_visualization = true;
     Visualization visualization = Visualization::Gauges;
     bool mini_sparklines = false;
 };
@@ -118,6 +119,25 @@ struct TilesConfig
     TileConfig network{};
     TileConfig disk{};
     TileConfig ping{};
+};
+
+// One tile's geometry for the Custom layout preset, in DIPs relative to the panel content origin
+// (after the panel padding and the header). `tile` is the canonical tile key ("cpu", "ram", "gpu",
+// "network", "disk", "ping", or a future "fans"/"mainboard"); unknown keys are ignored by the
+// layout engine. `valid` is false until the user drags/resizes the tile.
+struct CustomTilePlacement
+{
+    std::string tile = "cpu";
+    double x = 0.0;
+    double y = 0.0;
+    double width = 0.0;
+    double height = 0.0;
+    bool valid = false;
+};
+
+struct LayoutConfig
+{
+    std::vector<CustomTilePlacement> custom_tiles{};
 };
 
 struct GeneralConfig
@@ -179,6 +199,7 @@ struct Config
     GeneralConfig general{};
     OverlayConfig overlay{};
     TilesConfig tiles{};
+    LayoutConfig layout{};
     SensorsConfig sensors{};
     HistoryConfig history{};
     HotkeysConfig hotkeys{};

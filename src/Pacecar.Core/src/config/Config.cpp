@@ -291,6 +291,7 @@ void to_json(Json& j, const TileConfig& tile)
              {"show_primary", tile.show_primary},
              {"show_secondary", tile.show_secondary},
              {"show_tertiary", tile.show_tertiary},
+             {"show_visualization", tile.show_visualization},
              {"visualization", VisualizationToString(tile.visualization)},
              {"mini_sparklines", tile.mini_sparklines}};
 }
@@ -302,9 +303,52 @@ void from_json(const Json& j, TileConfig& tile)
     tile.show_primary = GetBool(j, "show_primary", defaults.show_primary);
     tile.show_secondary = GetBool(j, "show_secondary", defaults.show_secondary);
     tile.show_tertiary = GetBool(j, "show_tertiary", defaults.show_tertiary);
+    tile.show_visualization = GetBool(j, "show_visualization", defaults.show_visualization);
     tile.visualization = static_cast<Visualization>(
         ParseEnumIndex(j, "visualization", kVisualizationNames, static_cast<int>(defaults.visualization)));
     tile.mini_sparklines = GetBool(j, "mini_sparklines", defaults.mini_sparklines);
+}
+
+void to_json(Json& j, const CustomTilePlacement& placement)
+{
+    j = Json{{"tile", placement.tile},
+             {"x", placement.x},
+             {"y", placement.y},
+             {"width", placement.width},
+             {"height", placement.height},
+             {"valid", placement.valid}};
+}
+
+void from_json(const Json& j, CustomTilePlacement& placement)
+{
+    const CustomTilePlacement defaults{};
+    placement.tile = GetString(j, "tile", defaults.tile);
+    placement.x = GetDouble(j, "x", defaults.x);
+    placement.y = GetDouble(j, "y", defaults.y);
+    placement.width = GetDouble(j, "width", defaults.width);
+    placement.height = GetDouble(j, "height", defaults.height);
+    placement.valid = GetBool(j, "valid", defaults.valid);
+}
+
+void to_json(Json& j, const LayoutConfig& layout)
+{
+    j = Json{{"custom_tiles", layout.custom_tiles}};
+}
+
+void from_json(const Json& j, LayoutConfig& layout)
+{
+    layout.custom_tiles.clear();
+    const auto it = j.find("custom_tiles");
+    if (it != j.end() && it->is_array())
+    {
+        for (const auto& entry : *it)
+        {
+            if (entry.is_object())
+            {
+                layout.custom_tiles.push_back(entry.get<CustomTilePlacement>());
+            }
+        }
+    }
 }
 
 void to_json(Json& j, const TilesConfig& tiles)
@@ -458,6 +502,7 @@ void to_json(Json& j, const Config& config)
              {"general", config.general},
              {"overlay", config.overlay},
              {"tiles", config.tiles},
+             {"layout", config.layout},
              {"sensors", config.sensors},
              {"history", config.history},
              {"hotkeys", config.hotkeys}};
@@ -476,6 +521,7 @@ void from_json(const Json& j, Config& config)
     config.general = sub("general").get<GeneralConfig>();
     config.overlay = sub("overlay").get<OverlayConfig>();
     config.tiles = sub("tiles").get<TilesConfig>();
+    config.layout = sub("layout").get<LayoutConfig>();
     config.sensors = sub("sensors").get<SensorsConfig>();
     config.history = sub("history").get<HistoryConfig>();
     config.hotkeys = sub("hotkeys").get<HotkeysConfig>();
@@ -530,6 +576,27 @@ void Config::Clamp()
         if (rect.height < 0)
         {
             rect.height = 0;
+        }
+    }
+
+    for (auto& placement : layout.custom_tiles)
+    {
+        if (!std::isfinite(placement.x) || !std::isfinite(placement.y) ||
+            !std::isfinite(placement.width) || !std::isfinite(placement.height))
+        {
+            placement.x = 0.0;
+            placement.y = 0.0;
+            placement.width = 0.0;
+            placement.height = 0.0;
+            placement.valid = false;
+        }
+        if (placement.width < 0.0)
+        {
+            placement.width = 0.0;
+        }
+        if (placement.height < 0.0)
+        {
+            placement.height = 0.0;
         }
     }
 }

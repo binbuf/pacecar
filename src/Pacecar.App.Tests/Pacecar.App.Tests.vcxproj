@@ -84,6 +84,7 @@
     <ClCompile Include="format_test.cpp" />
     <ClCompile Include="gpu_provider_test.cpp" />
     <ClCompile Include="ipc_protocol_test.cpp" />
+    <ClCompile Include="layout_test.cpp" />
     <ClCompile Include="logger_test.cpp" />
     <ClCompile Include="memory_provider_test.cpp" />
     <ClCompile Include="network_provider_test.cpp" />

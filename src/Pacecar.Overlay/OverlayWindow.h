@@ -21,6 +21,7 @@
 #include "Hdr.h"
 #include "Renderer.h"
 #include "pacecar/config/Config.h"
+#include "pacecar/overlay/OverlayCommands.h"
 #include "pacecar/overlay/OverlayPlacement.h"
 
 namespace pacecar::overlay
@@ -54,6 +55,7 @@ class OverlayWindow
   public:
     using PositionChangedCallback = std::function<void(const pacecar::MonitorRect&)>;
     using CloseCallback = std::function<void()>;
+    using CommandCallback = std::function<void(OverlayCommand)>;
 
     OverlayWindow();
     ~OverlayWindow();
@@ -88,6 +90,10 @@ class OverlayWindow
     // Best-effort capture exclusion; a no-op when unsupported. Records the outcome.
     void ApplyCaptureExclusion(bool enabled);
 
+    // Applies config-driven theme and layout to the live renderer without recreating the window, so
+// preset/toggle/theme changes take effect immediately (design ref 04-ui-ux.md).
+    void ApplyConfig(const pacecar::Config& config);
+
     // Marks the renderer dirty and presents immediately if the window is visible.
     void Invalidate();
 
@@ -98,6 +104,9 @@ class OverlayWindow
 
     // Invoked when the window is destroyed (defaults to posting WM_QUIT).
     void SetCloseCallback(CloseCallback callback);
+
+    // Invoked for context-menu commands the window does not own (Settings/History/Specs).
+    void SetCommandCallback(CommandCallback callback);
 
     [[nodiscard]] IRenderer* Renderer() const noexcept
     {
@@ -124,6 +133,9 @@ class OverlayWindow
     void HandleDpiChanged(WPARAM wParam, LPARAM lParam);
     void ResizeRendererToWindow();
     void PublishPlacement();
+    [[nodiscard]] LRESULT HitTestBorder(LPARAM lParam) const;
+    void ShowContextMenu(POINT screenPoint);
+    void ExecuteCommand(OverlayCommand command);
     [[nodiscard]] unsigned WindowDpi() const;
     [[nodiscard]] HMONITOR CurrentMonitor() const;
     [[nodiscard]] pacecar::MonitorRect PlacementFor(const std::optional<pacecar::MonitorRect>& saved,
@@ -139,6 +151,7 @@ class OverlayWindow
     std::vector<MonitorWorkArea> monitors_;
     PositionChangedCallback positionChanged_;
     CloseCallback closeCallback_;
+    CommandCallback commandCallback_;
     std::wstring diagnostics_;
 };
 

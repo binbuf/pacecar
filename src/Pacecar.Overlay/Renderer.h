@@ -20,6 +20,7 @@
 
 #include <windows.h>
 
+#include "pacecar/overlay/Layout.h"
 #include "pacecar/overlay/Theme.h"
 
 namespace pacecar::overlay
@@ -61,6 +62,9 @@ class IRenderer
 
     // Sets the resolved color/opacity theme used by the widget scene (from config + High Contrast).
     virtual void SetTheme(const ResolvedTheme& theme) = 0;
+
+    // Applies the config-driven layout preset/toggles. Takes effect on the next `Present`.
+    virtual void SetLayout(const LayoutSettings& layout) = 0;
 
     // Marks the content dirty so the next `Present` re-renders and publishes.
     virtual void Invalidate() noexcept = 0;
