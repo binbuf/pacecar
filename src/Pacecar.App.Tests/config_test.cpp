@@ -184,6 +184,7 @@ const char* kDefaultConfigJson = R"JSON({
     "fan_speed": true,
     "ram_temperature": true,
     "mainboard_temperature": true,
+    "deep_sensors": false,
     "disk_temp_mode": "selected_disk",
     "fan_mode": "highest",
     "mainboard_mode": "highest",

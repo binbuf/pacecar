@@ -211,7 +211,13 @@ void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
     const RectF headerRect{settings_.panelPadding, settings_.panelPadding,
                            size.width - settings_.panelPadding,
                            settings_.panelPadding + settings_.headerHeight};
-    header_.Draw(target, text_, styles_, headerRect, L"PACECAR", L"Live", theme);
+    const bool haveFrame = frame_ && frame_->snapshot;
+    const wchar_t* status = L"Live";
+    if (haveFrame && !frame_->snapshot->deepSensors.available)
+    {
+        status = L"Deep sensors off";
+    }
+    header_.Draw(target, text_, styles_, headerRect, L"PACECAR", status, theme);
 
     const LayoutResult layout = ComputeLayout(size.width, size.height, settings_);
     const bool live = frame_ && frame_->snapshot;

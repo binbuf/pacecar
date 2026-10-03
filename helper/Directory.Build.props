@@ -1,0 +1,8 @@
+<Project>
+  <!--
+    Intentionally empty. Its presence stops MSBuild's Directory.Build.props auto-discovery from
+    walking above `helper/` into the native app's conventions. The native build settings live under
+    `build/Directory.Build.props` and are imported explicitly by the .vcxproj files; the managed
+    helper must not inherit the C++/vcpkg/static-CRT (/MT) settings.
+  -->
+</Project>

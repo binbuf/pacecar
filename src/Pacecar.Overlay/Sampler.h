@@ -29,6 +29,9 @@
 #include "pacecar/metrics/DisplayFrame.h"
 #include "pacecar/metrics/GpuPdhProvider.h"
 #include "pacecar/metrics/GpuVendorProvider.h"
+#include "pacecar/metrics/PawnIODetection.h"
+#include "pacecar/metrics/SensorHelperClient.h"
+#include "pacecar/metrics/SensorHelperProvider.h"
 
 namespace pacecar::overlay
 {
@@ -73,6 +76,13 @@ class Sampler
     // One-line human-readable status (provider count, cadence, history capacity, QoS outcomes).
     [[nodiscard]] std::wstring Diagnostics() const;
 
+    // Deep-sensor helper status for the About/diagnostics text: "off (disabled in settings)",
+    // "connected", or an explanatory "unavailable ..." line.
+    [[nodiscard]] std::wstring HelperStatus() const;
+
+    // PawnIO detection result as text ("installed" / "not installed").
+    [[nodiscard]] std::wstring PawnIOStatus() const;
+
   private:
     void ThreadMain();
     void TickOnce();
@@ -82,6 +92,9 @@ class Sampler
     std::unique_ptr<pacecar::metrics::Aggregator> aggregator_;
     std::shared_ptr<pacecar::metrics::GpuPdhProvider> gpuProvider_;
     std::shared_ptr<pacecar::metrics::GpuVendorProvider> vendorProvider_;
+    std::shared_ptr<pacecar::metrics::SensorHelperClient> helperClient_;
+    std::shared_ptr<pacecar::metrics::SensorHelperProvider> helperProvider_;
+    pacecar::metrics::PawnIOStatus pawnIoStatus_ = pacecar::metrics::PawnIOStatus::Absent;
     std::thread thread_;
 
     mutable std::mutex mutex_;

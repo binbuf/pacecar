@@ -84,7 +84,11 @@
     <ClInclude Include="include\pacecar\metrics\MemoryProvider.h" />
     <ClInclude Include="include\pacecar\metrics\MetricsSnapshot.h" />
     <ClInclude Include="include\pacecar\metrics\NetworkProvider.h" />
+    <ClInclude Include="include\pacecar\metrics\PawnIODetection.h" />
     <ClInclude Include="include\pacecar\metrics\PingProvider.h" />
+    <ClInclude Include="include\pacecar\metrics\PipeSecurity.h" />
+    <ClInclude Include="include\pacecar\metrics\SensorHelperClient.h" />
+    <ClInclude Include="include\pacecar\metrics\SensorHelperProvider.h" />
     <ClInclude Include="include\pacecar\overlay\Layout.h" />
     <ClInclude Include="include\pacecar\overlay\OverlayCommands.h" />
     <ClInclude Include="include\pacecar\overlay\OverlayPlacement.h" />
@@ -124,7 +128,11 @@
     <ClCompile Include="src\metrics\MemoryProvider.cpp" />
     <ClCompile Include="src\metrics\MetricsSnapshot.cpp" />
     <ClCompile Include="src\metrics\NetworkProvider.cpp" />
+    <ClCompile Include="src\metrics\PawnIODetection.cpp" />
     <ClCompile Include="src\metrics\PingProvider.cpp" />
+    <ClCompile Include="src\metrics\PipeSecurity.cpp" />
+    <ClCompile Include="src\metrics\SensorHelperClient.cpp" />
+    <ClCompile Include="src\metrics\SensorHelperProvider.cpp" />
     <ClCompile Include="src\overlay\Layout.cpp" />
     <ClCompile Include="src\overlay\OverlayPlacement.cpp" />
     <ClCompile Include="src\overlay\SettingsBinding.cpp" />

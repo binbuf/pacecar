@@ -52,7 +52,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gtest_main.lib;d2d1.lib;dwrite.lib;windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gtest_main.lib;advapi32.lib;d2d1.lib;dwrite.lib;windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -70,7 +70,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>gtest_main.lib;d2d1.lib;dwrite.lib;windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gtest_main.lib;advapi32.lib;d2d1.lib;dwrite.lib;windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -92,10 +92,13 @@
     <ClCompile Include="memory_provider_test.cpp" />
     <ClCompile Include="network_provider_test.cpp" />
     <ClCompile Include="overlay_placement_test.cpp" />
+    <ClCompile Include="pawnio_detection_test.cpp" />
     <ClCompile Include="pdh_test.cpp" />
     <ClCompile Include="ping_provider_test.cpp" />
+    <ClCompile Include="pipe_security_test.cpp" />
     <ClCompile Include="ring_buffer_test.cpp" />
     <ClCompile Include="sampling_test.cpp" />
+    <ClCompile Include="sensor_helper_client_test.cpp" />
     <ClCompile Include="settings_test.cpp" />
     <ClCompile Include="smoke_test.cpp" />
     <ClCompile Include="smoothing_test.cpp" />

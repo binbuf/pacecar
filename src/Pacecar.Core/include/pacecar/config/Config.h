@@ -175,6 +175,9 @@ struct SensorsConfig
     bool fan_speed = true;
     bool ram_temperature = true;
     bool mainboard_temperature = true;
+    // Opt-in deep sensors: when true the UI attempts to connect to the elevated Pacecar.Sensors
+    // helper for package/board/DIMM/fan sensors. Default off; the UI stays unelevated regardless.
+    bool deep_sensors = false;
     DiskTempMode disk_temp_mode = DiskTempMode::SelectedDisk;
     FanSpeedMode fan_mode = FanSpeedMode::Highest;
     MainboardTempMode mainboard_mode = MainboardTempMode::Highest;

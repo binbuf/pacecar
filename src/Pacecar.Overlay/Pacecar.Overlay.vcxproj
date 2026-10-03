@@ -71,8 +71,7 @@
   <ItemGroup>
     <ClInclude Include="Diagnostics.h" />
     <ClInclude Include="framework.h" />
-    <ClInclude Include="Hdr.h" />
-    <ClInclude Include="HelperClient.h" />
+<ClInclude Include="Hdr.h" />
     <ClInclude Include="HistoryWindow.h" />
     <ClInclude Include="Hotkey.h" />
     <ClInclude Include="OverlayWindow.h" />
@@ -98,8 +97,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Diagnostics.cpp" />
-    <ClCompile Include="Hdr.cpp" />
-    <ClCompile Include="HelperClient.cpp" />
+<ClCompile Include="Hdr.cpp" />
     <ClCompile Include="HistoryWindow.cpp" />
     <ClCompile Include="Hotkey.cpp" />
     <ClCompile Include="OverlayWindow.cpp" />

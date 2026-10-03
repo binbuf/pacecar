@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "OverlayWindow.h"
+#include "pacecar/app/AppIdentity.h"
 #include "pacecar/metrics/CpuProvider.h"
 #include "pacecar/metrics/DiskProvider.h"
 #include "pacecar/metrics/GpuPdhProvider.h"
@@ -109,7 +110,12 @@ void Sampler::BuildProviders(const pacecar::Config& config)
 {
     providerCount_ = 0;
 
-    aggregator_->ReserveProviders(7);
+    {
+        const auto source = pacecar::metrics::MakeWin32PawnIOSource();
+        pawnIoStatus_ = pacecar::metrics::DetectPawnIO(*source);
+    }
+
+    aggregator_->ReserveProviders(8);
     aggregator_->AddProvider(std::make_shared<pacecar::metrics::CpuProvider>());
     aggregator_->AddProvider(std::make_shared<pacecar::metrics::MemoryProvider>());
     gpuProvider_ = std::make_shared<pacecar::metrics::GpuPdhProvider>(
@@ -129,6 +135,23 @@ void Sampler::BuildProviders(const pacecar::Config& config)
         pacecar::metrics::MakePdhDiskSource(), config.sensors.disk_selection));
     aggregator_->AddProvider(std::make_shared<pacecar::metrics::PingProvider>(
         pacecar::metrics::MakeIcmpPingSource(), config.sensors.ping_target));
+
+    // Registered last so a real package/board/fan/dimm reading overrides the best-effort ACPI
+    // baseline. Only created when the user enabled deep sensors; otherwise deep metrics stay
+    // unavailable and the UI reports "off".
+    if (config.sensors.deep_sensors)
+    {
+        const std::wstring sid = pacecar::app::CurrentUserSid();
+        helperClient_ = std::make_shared<pacecar::metrics::SensorHelperClient>(
+            pacecar::metrics::SensorHelperClient::DefaultPipeName(sid));
+        helperProvider_ = std::make_shared<pacecar::metrics::SensorHelperProvider>(helperClient_);
+        aggregator_->AddProvider(helperProvider_);
+    }
+    else
+    {
+        helperClient_.reset();
+        helperProvider_.reset();
+    }
 
     providerCount_ = aggregator_->ProviderCount();
 }
@@ -301,5 +324,27 @@ std::wstring Sampler::Diagnostics() const
                     : L" (unavailable)";
     }
     return text;
+}
+
+std::wstring Sampler::HelperStatus() const
+{
+    if (!helperProvider_ || !helperClient_)
+    {
+        return L"off (disabled in settings)";
+    }
+    if (helperClient_->Connected())
+    {
+        return helperClient_->Status();
+    }
+    if (pawnIoStatus_ == pacecar::metrics::PawnIOStatus::Absent)
+    {
+        return L"unavailable - install PawnIO";
+    }
+    return L"unavailable (helper not running)";
+}
+
+std::wstring Sampler::PawnIOStatus() const
+{
+    return pacecar::metrics::PawnIOStatusText(pawnIoStatus_);
 }
 } // namespace pacecar::overlay

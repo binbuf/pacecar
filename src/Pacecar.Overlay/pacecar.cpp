@@ -1,7 +1,7 @@
 // pacecar.cpp : Overlay host process.
 //
 // The app shell: command-line parse, config load, per-user single-instance guard, overlay window,
-// tray icon, global hotkeys, sampler, helper stub, and the full shutdown path (debounced config
+// tray icon, global hotkeys, sampler (which owns the sensor-helper client), and the full shutdown path (debounced config
 // save on exit, WM_ENDSESSION, and console Ctrl+C).
 //
 // Command line:
@@ -43,7 +43,6 @@
 #include <objbase.h>
 
 #include "Diagnostics.h"
-#include "HelperClient.h"
 #include "Hdr.h"
 #include "HistoryWindow.h"
 #include "Hotkey.h"
@@ -423,9 +422,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         }
     }
 
-    pacecar::overlay::HelperClient helper;
-    static_cast<void>(helper.TryConnect());
-
     std::optional<pacecar::MonitorRect> savedRect;
     for (const pacecar::MonitorRect& rect : config.overlay.monitor_rects)
     {
@@ -555,13 +551,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
             SyncStartWithWindows(config);
         }
 
-        const auto aboutText = [&overlay, &sampler, &helper]
+        const auto aboutText = [&overlay, &sampler]
         {
             std::wstring text = L"Version: " + Utf8ToWide(pacecar::CoreVersion()) + L"\n";
             text += L"Renderer: " + overlay.Diagnostics() + L"\n";
             text += L"Sampler: " + sampler.Diagnostics() + L"\n";
-            text += L"Helper: " + helper.Status() + L"\n";
-            text += L"PawnIO: not installed (deep sensors unavailable)\n";
+            text += L"Helper: " + sampler.HelperStatus() + L"\n";
+            text += L"PawnIO: " + sampler.PawnIOStatus() + L"\n";
             return text;
         };
 
@@ -645,7 +641,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                 std::wstring info = L"Pacecar " + Utf8ToWide(pacecar::CoreVersion()) + L"\n";
                 info += overlay.Diagnostics() + L"\n";
                 info += sampler.Diagnostics() + L"\n";
-                info += L"helper: " + helper.Status() + L"\n";
+                info += L"helper: " + sampler.HelperStatus() + L"\n";
                 CopyTextToClipboard(overlay.Hwnd(), info);
                 break;
             }
@@ -768,7 +764,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         std::wstring report;
         report += L"diagnostics: " + overlay.Diagnostics() + L"\n";
         report += L"sampler:     " + sampler.Diagnostics() + L"\n";
-        report += L"helper:      " + helper.Status() + L"\n";
+        report += L"helper:      " + sampler.HelperStatus() + L"\n";
         report += L"overhead:    " + pacecar::overlay::FormatProcessUsage(finalUsage) + L"\n";
 
         wchar_t firstPaintLine[96] = {};
@@ -966,7 +962,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         g_signalWindow = nullptr;
         hotkeys.UnregisterAll();
         tray.Destroy();
-        helper.Disconnect();
         logEvent(L"shutdown");
     }
 

@@ -442,6 +442,7 @@ void to_json(Json& j, const SensorsConfig& sensors)
              {"fan_speed", sensors.fan_speed},
              {"ram_temperature", sensors.ram_temperature},
              {"mainboard_temperature", sensors.mainboard_temperature},
+             {"deep_sensors", sensors.deep_sensors},
              {"disk_temp_mode", DiskTempToString(sensors.disk_temp_mode)},
              {"fan_mode", FanModeToString(sensors.fan_mode)},
              {"mainboard_mode", MainboardModeToString(sensors.mainboard_mode)},
@@ -461,6 +462,7 @@ void from_json(const Json& j, SensorsConfig& sensors)
     sensors.fan_speed = GetBool(j, "fan_speed", defaults.fan_speed);
     sensors.ram_temperature = GetBool(j, "ram_temperature", defaults.ram_temperature);
     sensors.mainboard_temperature = GetBool(j, "mainboard_temperature", defaults.mainboard_temperature);
+    sensors.deep_sensors = GetBool(j, "deep_sensors", defaults.deep_sensors);
     sensors.disk_temp_mode = static_cast<DiskTempMode>(
         ParseEnumIndex(j, "disk_temp_mode", kDiskTempNames, static_cast<int>(defaults.disk_temp_mode)));
     sensors.fan_mode = static_cast<FanSpeedMode>(

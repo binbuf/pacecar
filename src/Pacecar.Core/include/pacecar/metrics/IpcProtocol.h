@@ -95,6 +95,39 @@ struct SensorSnapshotPayload
 static_assert(sizeof(SensorSnapshotPayload) <= kMaxPayloadBytes,
               "SensorSnapshotPayload must fit the payload bound");
 
+// Handshake payloads. `Hello` is sent by the UI client on (re)connect; the helper replies with
+// `HelloAck`. The header already carries the protocol version, so these carry process identity and
+// a capability bitmask the UI can use to explain what the helper can read.
+struct HelloPayload
+{
+    std::uint32_t clientPid;
+    std::uint32_t reserved;
+};
+
+static_assert(sizeof(HelloPayload) == 8, "HelloPayload layout must stay fixed");
+
+// Sensor families the helper reports it can provide. Values are bit flags.
+enum class SensorCapability : std::uint32_t
+{
+    None = 0,
+    CpuPackageTemp = 1u << 0,
+    CpuCoreTemp = 1u << 1,
+    MainboardTemp = 1u << 2,
+    DimmTemp = 1u << 3,
+    DiskTemp = 1u << 4,
+    FanRpm = 1u << 5,
+    Voltage = 1u << 6,
+    Power = 1u << 7,
+};
+
+struct HelloAckPayload
+{
+    std::uint32_t helperPid;
+    std::uint32_t capabilities;
+};
+
+static_assert(sizeof(HelloAckPayload) == 8, "HelloAckPayload layout must stay fixed");
+
 #pragma pack(pop)
 
 struct DecodedMessage
