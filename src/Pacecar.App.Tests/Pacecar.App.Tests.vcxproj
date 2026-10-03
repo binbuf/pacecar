@@ -72,7 +72,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="format_test.cpp" />
+    <ClCompile Include="logger_test.cpp" />
+    <ClCompile Include="pdh_test.cpp" />
+    <ClCompile Include="ring_buffer_test.cpp" />
     <ClCompile Include="smoke_test.cpp" />
+    <ClCompile Include="smoothing_test.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Pacecar.Core\Pacecar.Core.vcxproj">

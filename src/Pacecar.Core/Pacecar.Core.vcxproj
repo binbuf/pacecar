@@ -61,9 +61,18 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="include\pacecar\core.h" />
+    <ClInclude Include="include\pacecar\util\Format.h" />
+    <ClInclude Include="include\pacecar\util\Logger.h" />
+    <ClInclude Include="include\pacecar\util\Pdh.h" />
+    <ClInclude Include="include\pacecar\util\RingBuffer.h" />
+    <ClInclude Include="include\pacecar\util\Smoothing.h" />
+    <ClInclude Include="include\pacecar\util\Wil.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\core.cpp" />
+    <ClCompile Include="src\util\Format.cpp" />
+    <ClCompile Include="src\util\Logger.cpp" />
+    <ClCompile Include="src\util\Pdh.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\..\build\Directory.Build.targets" />
