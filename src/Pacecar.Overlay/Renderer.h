@@ -20,6 +20,8 @@
 
 #include <windows.h>
 
+#include "pacecar/overlay/Theme.h"
+
 namespace pacecar::overlay
 {
 enum class OverlayRecipe
@@ -56,6 +58,9 @@ class IRenderer
 
     // Recreates the surface for a new physical size / DPI. Keeps the device where possible.
     virtual HRESULT Resize(int widthPx, int heightPx, unsigned dpi) = 0;
+
+    // Sets the resolved color/opacity theme used by the widget scene (from config + High Contrast).
+    virtual void SetTheme(const ResolvedTheme& theme) = 0;
 
     // Marks the content dirty so the next `Present` re-renders and publishes.
     virtual void Invalidate() noexcept = 0;

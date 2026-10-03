@@ -196,6 +196,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                                                 HitTestTransparent
                                           : pacecar::overlay::CompositionClickThrough::
                                                 TransparentExStyle;
+    options.panelOpacity = config.general.opacity;
+    options.theme = config.general.theme;
 
     pacecar::overlay::OverlayWindow overlay;
     if (!overlay.Create(hInstance, options, savedRect))

@@ -9,20 +9,35 @@
 #include <stdexcept>
 #include <string>
 
+#include "allocation_probe.h"
 #include "pacecar/metrics/Aggregator.h"
 #include "pacecar/metrics/IMetricProvider.h"
 #include "pacecar/metrics/MetricsSnapshot.h"
 
 // Counts heap allocations across the whole test executable. The steady-state aggregation test
-// snapshots this counter around a run of ticks and asserts it does not move.
+// snapshots this counter around a run of ticks and asserts it does not move. Other tests reuse the
+// same counter through `allocation_probe.h`.
+namespace pacecar::test
+{
 namespace
 {
 std::atomic<std::size_t> g_allocations{0};
 } // namespace
 
+std::size_t AllocationCount() noexcept
+{
+    return g_allocations.load(std::memory_order_relaxed);
+}
+
+void ResetAllocationCount() noexcept
+{
+    g_allocations.store(0, std::memory_order_relaxed);
+}
+} // namespace pacecar::test
+
 void* operator new(std::size_t size)
 {
-    g_allocations.fetch_add(1, std::memory_order_relaxed);
+    pacecar::test::g_allocations.fetch_add(1, std::memory_order_relaxed);
     if (size == 0)
     {
         size = 1;
@@ -346,12 +361,12 @@ TEST(Aggregator, NoAllocationInSteadyState)
     // Warm up: the first tick sizes EMA vectors and core arrays within their reserved capacities.
     aggregator.Tick(0);
 
-    const std::size_t before = g_allocations.load(std::memory_order_relaxed);
+    const std::size_t before = pacecar::test::AllocationCount();
     for (int i = 1; i <= 64; ++i)
     {
         aggregator.Tick(static_cast<std::uint64_t>(i) * 1000u);
     }
-    const std::size_t after = g_allocations.load(std::memory_order_relaxed);
+    const std::size_t after = pacecar::test::AllocationCount();
     EXPECT_EQ(after, before);
 }
 } // namespace

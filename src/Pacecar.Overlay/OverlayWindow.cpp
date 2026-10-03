@@ -12,6 +12,7 @@
 
 #include <shellscalingapi.h>
 
+#include "Widgets/SystemTheme.h"
 #include "pacecar/util/Logger.h"
 
 namespace pacecar::overlay
@@ -199,6 +200,7 @@ bool OverlayWindow::InitializeRenderer(OverlayRecipe recipe, const pacecar::Moni
     {
         return false;
     }
+    renderer_->SetTheme(ResolveSystemTheme(options_.theme, options_.panelOpacity));
     renderer_->Invalidate();
     const PresentResult presented = renderer_->Present();
     if (FAILED(presented.hr))

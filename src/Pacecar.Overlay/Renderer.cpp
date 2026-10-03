@@ -1,5 +1,6 @@
 #include "Renderer.h"
 
+#include "Widgets/WidgetScene.h"
 #include "pacecar/overlay/OverlayPlacement.h"
 
 #include <cstring>
@@ -32,66 +33,6 @@ using ComPtr = Microsoft::WRL::ComPtr<T>;
     } while (false)
 
 const D2D1_COLOR_F kTransparent = D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f);
-
-// Placeholder panel: a translucent rounded rectangle with a border and a few bars. Task 10 replaces
-// this with real widgets; it exists here to prove per-pixel alpha, DPI scaling, and the pipeline.
-void DrawPlaceholder(ID2D1RenderTarget* target)
-{
-    const D2D1_SIZE_F size = target->GetSize();
-    if (size.width <= 1.0f || size.height <= 1.0f)
-    {
-        return;
-    }
-
-    ComPtr<ID2D1SolidColorBrush> background;
-    ComPtr<ID2D1SolidColorBrush> border;
-    ComPtr<ID2D1SolidColorBrush> accent;
-    ComPtr<ID2D1SolidColorBrush> bar;
-    if (FAILED(target->CreateSolidColorBrush(D2D1::ColorF(0.05f, 0.06f, 0.08f, 0.62f),
-                                             background.GetAddressOf())) ||
-        FAILED(target->CreateSolidColorBrush(D2D1::ColorF(0.35f, 0.65f, 1.0f, 0.90f),
-                                             border.GetAddressOf())) ||
-        FAILED(target->CreateSolidColorBrush(D2D1::ColorF(0.35f, 0.85f, 0.55f, 0.95f),
-                                             accent.GetAddressOf())) ||
-        FAILED(target->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.25f),
-                                             bar.GetAddressOf())))
-    {
-        return;
-    }
-
-    const D2D1_ROUNDED_RECT panel = D2D1::RoundedRect(
-        D2D1::RectF(0.5f, 0.5f, size.width - 0.5f, size.height - 0.5f), 4.0f, 4.0f);
-    target->FillRoundedRectangle(panel, background.Get());
-    target->DrawRoundedRectangle(panel, border.Get(), 1.0f);
-
-    const float left = 8.0f;
-    const float right = size.width - 8.0f;
-    const float barHeight = 4.0f;
-    const float gap = 4.0f;
-    const float width = right - left;
-    if (width > 0.0f)
-    {
-        const float fractions[3] = {0.80f, 0.55f, 0.35f};
-        for (int i = 0; i < 3; ++i)
-        {
-            const float top = 8.0f + static_cast<float>(i) * (barHeight + gap);
-            if (top + barHeight > size.height - 8.0f)
-            {
-                break;
-            }
-            target->FillRectangle(
-                D2D1::RectF(left, top, left + width * fractions[i], top + barHeight), bar.Get());
-        }
-    }
-
-    const float accentSize = 6.0f;
-    if (size.height > accentSize + 8.0f)
-    {
-        target->FillRectangle(D2D1::RectF(left, size.height - accentSize - 4.0f,
-                                           left + accentSize, size.height - 4.0f),
-                              accent.Get());
-    }
-}
 
 std::wstring FormatHresult(HRESULT hr)
 {
@@ -152,6 +93,12 @@ class LayeredRenderer final : public IRenderer
         return CreateSurface(widthPx, heightPx, dpi);
     }
 
+    void SetTheme(const ResolvedTheme& theme) override
+    {
+        theme_ = theme;
+        dirty_ = true;
+    }
+
     void Invalidate() noexcept override
     {
         dirty_ = true;
@@ -178,7 +125,7 @@ class LayeredRenderer final : public IRenderer
 
         renderTarget_->BeginDraw();
         renderTarget_->Clear(kTransparent);
-        DrawPlaceholder(renderTarget_.Get());
+        scene_.Draw(renderTarget_.Get(), theme_);
         const HRESULT drawResult = renderTarget_->EndDraw();
         if (FAILED(drawResult))
         {
@@ -216,6 +163,7 @@ class LayeredRenderer final : public IRenderer
 
     void Trim() noexcept override
     {
+        scene_.Trim();
         renderTarget_.Reset();
         dirty_ = true;
     }
@@ -330,6 +278,8 @@ class LayeredRenderer final : public IRenderer
     ComPtr<IWICImagingFactory> wicFactory_;
     ComPtr<IWICBitmap> wicBitmap_;
     ComPtr<ID2D1RenderTarget> renderTarget_;
+    WidgetScene scene_;
+    ResolvedTheme theme_{};
     HBITMAP dib_ = nullptr;
     HDC memoryDc_ = nullptr;
     HGDIOBJ previousDib_ = nullptr;
@@ -437,6 +387,12 @@ class CompositionRenderer final : public IRenderer
         return CreateTargetBitmap();
     }
 
+    void SetTheme(const ResolvedTheme& theme) override
+    {
+        theme_ = theme;
+        dirty_ = true;
+    }
+
     void Invalidate() noexcept override
     {
         dirty_ = true;
@@ -463,7 +419,7 @@ class CompositionRenderer final : public IRenderer
 
         d2dContext_->BeginDraw();
         d2dContext_->Clear(kTransparent);
-        DrawPlaceholder(d2dContext_.Get());
+        scene_.Draw(d2dContext_.Get(), theme_);
         const HRESULT drawResult = d2dContext_->EndDraw();
         if (FAILED(drawResult))
         {
@@ -485,6 +441,7 @@ class CompositionRenderer final : public IRenderer
 
     void Trim() noexcept override
     {
+        scene_.Trim();
         if (d2dContext_ != nullptr)
         {
             d2dContext_->SetTarget(nullptr);
@@ -600,6 +557,8 @@ class CompositionRenderer final : public IRenderer
     ComPtr<ID2D1Device> d2dDevice_;
     ComPtr<ID2D1DeviceContext> d2dContext_;
     ComPtr<ID2D1Bitmap1> targetBitmap_;
+    WidgetScene scene_;
+    ResolvedTheme theme_{};
 };
 } // namespace
 

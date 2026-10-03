@@ -44,6 +44,9 @@ struct OverlayOptions
     // DIP size used when there is no valid saved rectangle.
     float defaultWidthDip = 320.0f;
     float defaultHeightDip = 200.0f;
+    // Panel background opacity and theme from config; High Contrast is OR-ed in at create time.
+    double panelOpacity = 0.65;
+    pacecar::Theme theme = pacecar::Theme::Dark;
 };
 
 class OverlayWindow
