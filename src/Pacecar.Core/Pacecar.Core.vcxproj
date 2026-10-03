@@ -75,6 +75,7 @@
     <ClInclude Include="include\pacecar\metrics\MetricsSnapshot.h" />
     <ClInclude Include="include\pacecar\metrics\NetworkProvider.h" />
     <ClInclude Include="include\pacecar\metrics\PingProvider.h" />
+    <ClInclude Include="include\pacecar\overlay\OverlayPlacement.h" />
     <ClInclude Include="include\pacecar\util\ElapsedClock.h" />
     <ClInclude Include="include\pacecar\util\Format.h" />
     <ClInclude Include="include\pacecar\util\Logger.h" />
@@ -97,6 +98,7 @@
     <ClCompile Include="src\metrics\MetricsSnapshot.cpp" />
     <ClCompile Include="src\metrics\NetworkProvider.cpp" />
     <ClCompile Include="src\metrics\PingProvider.cpp" />
+    <ClCompile Include="src\overlay\OverlayPlacement.cpp" />
     <ClCompile Include="src\util\ElapsedClock.cpp" />
     <ClCompile Include="src\util\Format.cpp" />
     <ClCompile Include="src\util\Logger.cpp" />

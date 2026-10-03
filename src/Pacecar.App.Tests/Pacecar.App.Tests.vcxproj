@@ -82,6 +82,7 @@
     <ClCompile Include="logger_test.cpp" />
     <ClCompile Include="memory_provider_test.cpp" />
     <ClCompile Include="network_provider_test.cpp" />
+    <ClCompile Include="overlay_placement_test.cpp" />
     <ClCompile Include="pdh_test.cpp" />
     <ClCompile Include="ping_provider_test.cpp" />
     <ClCompile Include="ring_buffer_test.cpp" />
