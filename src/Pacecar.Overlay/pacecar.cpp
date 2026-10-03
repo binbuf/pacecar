@@ -19,6 +19,7 @@
 //   --start-hidden      start hidden (tray only)
 //   --no-tray           do not create the tray icon (tests / measure)
 //   --no-hotkey         do not register global hotkeys (tests / measure)
+//   --open-window=NAME  open a conventional window at startup (settings|specs|history)
 //   --exit-after=MS     cleanly exit MS milliseconds after startup (integration tests)
 //   --lifecycle-log=PATH  append lifecycle events (started/activation/shutdown) to PATH
 
@@ -44,10 +45,13 @@
 #include "Diagnostics.h"
 #include "HelperClient.h"
 #include "Hdr.h"
+#include "HistoryWindow.h"
 #include "Hotkey.h"
 #include "OverlayWindow.h"
 #include "Sampler.h"
+#include "SettingsWindow.h"
 #include "SingleInstance.h"
+#include "SpecsWindow.h"
 #include "Tray.h"
 #include "pacecar/app/AppIdentity.h"
 #include "pacecar/app/HotkeySpec.h"
@@ -108,6 +112,7 @@ struct CommandLineOptions
     bool startHidden = false;
     bool noTray = false;
     bool noHotkey = false;
+    std::wstring openWindow{};
     std::optional<unsigned> exitAfterMs{};
     std::wstring lifecycleLog{};
 };
@@ -287,6 +292,10 @@ CommandLineOptions ParseCommandLine()
         else if (arg == L"--no-hotkey")
         {
             options.noHotkey = true;
+        }
+        else if (arg.starts_with(L"--open-window="))
+        {
+            options.openWindow = arg.substr(14);
         }
         else if (arg == L"--measure")
         {
@@ -504,11 +513,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     pacecar::overlay::Sampler sampler;
 
+    // The repaint gate is created here (not with the frame pipeline below) so the Settings window's
+    // live-apply path can retune its interval without recreating it.
+    pacecar::metrics::RenderGate renderGate(
+        std::chrono::milliseconds(static_cast<int>(config.general.refresh)));
+
     // Global shell: single-instance activation, tray, hotkeys. Measure runs keep the minimal
     // behavior the probes rely on.
     pacecar::overlay::Tray tray;
     bool trayCreated = false;
     pacecar::overlay::HotkeyManager hotkeys;
+
+    // Conventional windows are created lazily on first open and destroyed at process exit. Declared
+    // outside the shell block so the message loop can route keyboard navigation to Settings.
+    pacecar::overlay::SettingsWindow settingsWindow;
+    pacecar::overlay::SpecsWindow specsWindow;
+    pacecar::overlay::HistoryWindow historyWindow;
 
     const auto refreshShellFlags = [&overlay, &tray, trayCreated]
     {
@@ -534,6 +554,72 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         {
             SyncStartWithWindows(config);
         }
+
+        const auto aboutText = [&overlay, &sampler, &helper]
+        {
+            std::wstring text = L"Version: " + Utf8ToWide(pacecar::CoreVersion()) + L"\n";
+            text += L"Renderer: " + overlay.Diagnostics() + L"\n";
+            text += L"Sampler: " + sampler.Diagnostics() + L"\n";
+            text += L"Helper: " + helper.Status() + L"\n";
+            text += L"PawnIO: not installed (deep sensors unavailable)\n";
+            return text;
+        };
+
+        // Live-apply every Settings edit: overlay appearance/behavior, sampler cadence, hotkey
+        // re-registration, tray flags, and the debounced config write. No per-keystroke/per-drag
+        // write happens here - `saver.Touch()` only arms the 500 ms debounce.
+        const auto applyConfigChanges = [&]
+        {
+            overlay.ApplyConfig(config);
+            const auto refreshMs =
+                std::chrono::milliseconds(static_cast<int>(config.general.refresh));
+            sampler.SetInterval(refreshMs);
+            renderGate.SetInterval(refreshMs);
+            if (!commandLine.noHotkey)
+            {
+                const std::wstring overlayHotkey = Utf8ToWide(config.hotkeys.toggle_overlay);
+                const pacecar::app::HotkeyParseResult overlayParse =
+                    pacecar::app::ParseHotkey(overlayHotkey);
+                if (overlayParse.ok())
+                {
+                    static_cast<void>(hotkeys.Register(
+                        pacecar::overlay::HotkeyManager::kToggleOverlayId, overlayParse.binding));
+                }
+                hotkeys.Unregister(pacecar::overlay::HotkeyManager::kToggleClickThroughId);
+                const std::wstring clickHotkey = Utf8ToWide(config.hotkeys.toggle_click_through);
+                if (!clickHotkey.empty())
+                {
+                    const pacecar::app::HotkeyParseResult clickParse =
+                        pacecar::app::ParseHotkey(clickHotkey);
+                    if (clickParse.ok())
+                    {
+                        static_cast<void>(hotkeys.Register(
+                            pacecar::overlay::HotkeyManager::kToggleClickThroughId,
+                            clickParse.binding));
+                    }
+                }
+            }
+            refreshShellFlags();
+            saver.Touch();
+        };
+
+        pacecar::overlay::SettingsWindowHooks settingsHooks;
+        settingsHooks.instance = hInstance;
+        settingsHooks.config = &config;
+        settingsHooks.onChanged = applyConfigChanges;
+        settingsHooks.onStartupSettingChanged = [&config, testMode]
+        {
+            if (!testMode)
+            {
+                SyncStartWithWindows(config);
+            }
+        };
+        settingsHooks.aboutText = aboutText;
+
+        const pacecar::overlay::HistoryWindow::SamplerAccess historyAccess =
+            [&sampler](pacecar::metrics::MetricHistory& out) { return sampler.CopyHistory(out); };
+        const pacecar::overlay::HistoryWindow::SnapshotAccess snapshotAccess =
+            [&sampler]() { return sampler.LatestSnapshot(); };
 
         const auto handleCommand = [&](pacecar::overlay::OverlayCommand command)
         {
@@ -568,10 +654,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                             L"About Pacecar", MB_OK | MB_ICONINFORMATION);
                 break;
             case pacecar::overlay::OverlayCommand::Settings:
-            case pacecar::overlay::OverlayCommand::History:
+                if (!settingsWindow.Open(settingsHooks))
+                {
+                    pacecar::LogWarn(L"overlay: failed to open the Settings window");
+                }
+                break;
             case pacecar::overlay::OverlayCommand::Specs:
-                pacecar::LogWarn(
-                    L"overlay: Settings/History/Specs windows are not available yet (T14)");
+                if (!specsWindow.Open(hInstance))
+                {
+                    pacecar::LogWarn(L"overlay: failed to open the Specs window");
+                }
+                break;
+            case pacecar::overlay::OverlayCommand::History:
+                if (!historyWindow.Open(hInstance, &config, historyAccess, snapshotAccess))
+                {
+                    pacecar::LogWarn(L"overlay: failed to open the History window");
+                }
                 break;
             default:
                 break;
@@ -641,6 +739,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
         g_signalWindow = overlay.Hwnd();
         SetConsoleCtrlHandler(SaveAndQuitHandler, TRUE);
+
+        // Test/automation hook: open a conventional window at startup (no user gesture available).
+        if (commandLine.openWindow == L"settings")
+        {
+            handleCommand(pacecar::overlay::OverlayCommand::Settings);
+        }
+        else if (commandLine.openWindow == L"specs")
+        {
+            handleCommand(pacecar::overlay::OverlayCommand::Specs);
+        }
+        else if (commandLine.openWindow == L"history")
+        {
+            handleCommand(pacecar::overlay::OverlayCommand::History);
+        }
     }
 
     overlay.Show((config.general.start_hidden || commandLine.startHidden) ? SW_HIDE : nCmdShow);
@@ -709,8 +821,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         [&sampler](bool visible) { sampler.SetVisible(visible); });
     sampler.SetVisible(overlay.EffectivelyVisible());
 
-    pacecar::metrics::RenderGate renderGate(
-        std::chrono::milliseconds(static_cast<int>(config.general.refresh)));
     const auto elapsedMs = [&startTime]() -> std::uint64_t
     {
         return static_cast<std::uint64_t>(
@@ -817,6 +927,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
             {
                 saveConfig();
                 overlay.Quit();
+                continue;
+            }
+        }
+        // Route keyboard navigation (Tab/arrows/Enter/Escape) to the Settings dialog while it is
+        // active; this gives the conventional window dialog-style focus behavior and visible focus.
+        if (shellMode && settingsWindow.Created() &&
+            IsWindowVisible(settingsWindow.Hwnd()) != FALSE &&
+            (message.hwnd == settingsWindow.Hwnd() ||
+             IsChild(settingsWindow.Hwnd(), message.hwnd) != FALSE))
+        {
+            if (IsDialogMessageW(settingsWindow.Hwnd(), &message) != FALSE)
+            {
                 continue;
             }
         }

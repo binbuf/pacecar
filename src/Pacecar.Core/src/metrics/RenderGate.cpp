@@ -51,4 +51,9 @@ void RenderGate::Reset() noexcept
     lastPaintMs_ = 0;
     hasPainted_ = false;
 }
+
+void RenderGate::SetInterval(std::chrono::milliseconds minInterval) noexcept
+{
+    minInterval_ = std::max(minInterval, kMinInterval);
+}
 } // namespace pacecar::metrics

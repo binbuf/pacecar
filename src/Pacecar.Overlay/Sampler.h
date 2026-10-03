@@ -62,6 +62,11 @@ class Sampler
     // Convenience for the app's diagnostics and cache writer.
     [[nodiscard]] std::shared_ptr<const pacecar::metrics::MetricsSnapshot> LatestSnapshot() const;
 
+    // Copies the raw history rings for the History window. Thread-safe: the aggregator snapshots the
+    // rings under its tick lock. Returns false when the sampler is not running. The caller supplies
+    // an `out` sized to at least the planned raw capacity; it is resized to match the live rings.
+    bool CopyHistory(pacecar::metrics::MetricHistory& out) const;
+
     [[nodiscard]] bool Running() const noexcept;
 
     // One-line human-readable status (provider count, cadence, history capacity, QoS outcomes).

@@ -87,6 +87,7 @@
     <ClInclude Include="include\pacecar\overlay\Layout.h" />
     <ClInclude Include="include\pacecar\overlay\OverlayCommands.h" />
     <ClInclude Include="include\pacecar\overlay\OverlayPlacement.h" />
+    <ClInclude Include="include\pacecar\overlay\SettingsBinding.h" />
     <ClInclude Include="include\pacecar\overlay\TextCache.h" />
     <ClInclude Include="include\pacecar\overlay\Theme.h" />
     <ClInclude Include="include\pacecar\overlay\WidgetLayout.h" />
@@ -124,6 +125,7 @@
     <ClCompile Include="src\metrics\PingProvider.cpp" />
     <ClCompile Include="src\overlay\Layout.cpp" />
     <ClCompile Include="src\overlay\OverlayPlacement.cpp" />
+    <ClCompile Include="src\overlay\SettingsBinding.cpp" />
     <ClCompile Include="src\overlay\Theme.cpp" />
     <ClCompile Include="src\overlay\WidgetLayout.cpp" />
     <ClCompile Include="src\util\ElapsedClock.cpp" />

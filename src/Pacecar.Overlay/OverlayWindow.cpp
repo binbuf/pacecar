@@ -361,12 +361,16 @@ void OverlayWindow::ApplyConfig(const pacecar::Config& config)
 {
     options_.panelOpacity = config.general.opacity;
     options_.theme = config.general.theme;
+    options_.alwaysOnTop = config.overlay.always_on_top;
     if (renderer_ == nullptr)
     {
         return;
     }
     renderer_->SetTheme(ResolveSystemTheme(options_.theme, options_.panelOpacity));
     renderer_->SetLayout(LayoutSettingsFromConfig(config));
+    SetClickThrough(config.overlay.mode == pacecar::OverlayMode::ClickThrough);
+    ReassertTopmost();
+    ApplyCaptureExclusion(config.overlay.capture_exclusion);
     Invalidate();
 }
 

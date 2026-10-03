@@ -109,6 +109,11 @@ class Aggregator
         return history_;
     }
 
+    // Copies the raw history rings into `out` under the tick lock. `out` is resized to match. This is
+    // the only safe way for the UI thread to read history (never touch `History()` directly): it is
+    // intended for on-demand History-window refreshes, not the render path.
+    void CopyHistory(MetricHistory& out) const;
+
     [[nodiscard]] std::uint64_t TickCount() const noexcept
     {
         return tickIndex_;
@@ -166,7 +171,7 @@ class Aggregator
     std::vector<Ema> gpuEngineEmas_;
 
     mutable std::mutex mutex_;
-    std::mutex tickMutex_;
+    mutable std::mutex tickMutex_;
     std::function<void()> wake_;
     bool wakeSet_ = false;
     std::atomic<bool> visible_{false};

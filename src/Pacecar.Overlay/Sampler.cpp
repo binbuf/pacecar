@@ -266,6 +266,16 @@ bool Sampler::Running() const noexcept
     return running_.load();
 }
 
+bool Sampler::CopyHistory(pacecar::metrics::MetricHistory& out) const
+{
+    if (!aggregator_)
+    {
+        return false;
+    }
+    aggregator_->CopyHistory(out);
+    return true;
+}
+
 std::wstring Sampler::Diagnostics() const
 {
     wchar_t buffer[256] = {};

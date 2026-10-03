@@ -36,6 +36,10 @@ class RenderGate
     // Forgets the last fingerprint and paint time (next call always paints). Keep the counters.
     void Reset() noexcept;
 
+    // Changes the minimum repaint interval (clamped to the 250 ms floor) when the refresh rate is
+    // edited in the Settings window. Does not by itself force a repaint.
+    void SetInterval(std::chrono::milliseconds minInterval) noexcept;
+
     [[nodiscard]] std::uint64_t Fingerprint() const noexcept
     {
         return lastFingerprint_;

@@ -342,6 +342,12 @@ std::shared_ptr<const MetricsSnapshot> Aggregator::LatestSnapshot() const noexce
     return published_;
 }
 
+void Aggregator::CopyHistory(MetricHistory& out) const
+{
+    std::lock_guard<std::mutex> lock(tickMutex_);
+    out = history_;
+}
+
 std::uint64_t Aggregator::ProviderPollCount(std::size_t index) const
 {
     return index < providers_.size() ? providers_[index].pollCount : 0;
