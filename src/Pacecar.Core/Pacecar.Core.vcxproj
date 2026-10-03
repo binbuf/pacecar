@@ -60,6 +60,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="include\pacecar\config\Config.h" />
     <ClInclude Include="include\pacecar\core.h" />
     <ClInclude Include="include\pacecar\util\Format.h" />
     <ClInclude Include="include\pacecar\util\Logger.h" />
@@ -69,6 +70,7 @@
     <ClInclude Include="include\pacecar\util\Wil.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\config\Config.cpp" />
     <ClCompile Include="src\core.cpp" />
     <ClCompile Include="src\util\Format.cpp" />
     <ClCompile Include="src\util\Logger.cpp" />
