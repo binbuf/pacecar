@@ -74,6 +74,7 @@
   <ItemGroup>
     <ClCompile Include="aggregator_test.cpp" />
     <ClCompile Include="config_test.cpp" />
+    <ClCompile Include="cpu_provider_test.cpp" />
     <ClCompile Include="format_test.cpp" />
     <ClCompile Include="ipc_protocol_test.cpp" />
     <ClCompile Include="logger_test.cpp" />
