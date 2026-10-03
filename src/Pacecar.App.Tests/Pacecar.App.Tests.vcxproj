@@ -78,6 +78,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="aggregator_test.cpp" />
+    <ClCompile Include="app_shell_test.cpp" />
     <ClCompile Include="config_test.cpp" />
     <ClCompile Include="cpu_provider_test.cpp" />
     <ClCompile Include="disk_provider_test.cpp" />
@@ -85,6 +86,7 @@
     <ClCompile Include="gpu_provider_test.cpp" />
     <ClCompile Include="ipc_protocol_test.cpp" />
     <ClCompile Include="layout_test.cpp" />
+    <ClCompile Include="lifecycle_test.cpp" />
     <ClCompile Include="logger_test.cpp" />
     <ClCompile Include="memory_provider_test.cpp" />
     <ClCompile Include="network_provider_test.cpp" />

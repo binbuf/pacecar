@@ -51,7 +51,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d2d1.lib;dwrite.lib;d3d11.lib;dxgi.lib;dcomp.lib;windowscodecs.lib;shcore.lib;psapi.lib;wtsapi32.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d2d1.lib;dwrite.lib;d3d11.lib;dxgi.lib;dcomp.lib;windowscodecs.lib;shcore.lib;psapi.lib;wtsapi32.lib;dwmapi.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -65,14 +65,18 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>d2d1.lib;dwrite.lib;d3d11.lib;dxgi.lib;dcomp.lib;windowscodecs.lib;shcore.lib;psapi.lib;wtsapi32.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d2d1.lib;dwrite.lib;d3d11.lib;dxgi.lib;dcomp.lib;windowscodecs.lib;shcore.lib;psapi.lib;wtsapi32.lib;dwmapi.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Diagnostics.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="Hdr.h" />
+    <ClInclude Include="HelperClient.h" />
+    <ClInclude Include="Hotkey.h" />
     <ClInclude Include="OverlayWindow.h" />
+    <ClInclude Include="SingleInstance.h" />
+    <ClInclude Include="Tray.h" />
     <ClInclude Include="pacecar.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="Resource.h" />
@@ -92,10 +96,14 @@
   <ItemGroup>
     <ClCompile Include="Diagnostics.cpp" />
     <ClCompile Include="Hdr.cpp" />
+    <ClCompile Include="HelperClient.cpp" />
+    <ClCompile Include="Hotkey.cpp" />
     <ClCompile Include="OverlayWindow.cpp" />
     <ClCompile Include="pacecar.cpp" />
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="Sampler.cpp" />
+    <ClCompile Include="SingleInstance.cpp" />
+    <ClCompile Include="Tray.cpp" />
     <ClCompile Include="Widgets\Gauge.cpp" />
     <ClCompile Include="Widgets\Header.cpp" />
     <ClCompile Include="Widgets\Panel.cpp" />

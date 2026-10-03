@@ -65,6 +65,8 @@ class OverlayWindow
     using PositionChangedCallback = std::function<void(const pacecar::MonitorRect&)>;
     using CloseCallback = std::function<void()>;
     using CommandCallback = std::function<void(OverlayCommand)>;
+    // Invoked before placement is published on WM_ENDSESSION so the app can flush its config.
+    using SessionEndingCallback = std::function<void()>;
     // Reports the effective "should the sampler wake us?" visibility: the window is shown and not
     // suspended for occlusion/session lock. The app forwards this to `Sampler::SetVisible`.
     using VisibilityChangedCallback = std::function<void(bool visible)>;
@@ -81,6 +83,15 @@ class OverlayWindow
                 const std::optional<pacecar::MonitorRect>& savedRect);
 
     void Show(int cmdShow);
+
+    // Shows or hides the overlay without destroying it (tray Show/Hide and the toggle hotkey).
+    void SetVisible(bool visible);
+    void ToggleVisibility();
+    [[nodiscard]] bool IsVisible() const noexcept;
+
+    // Requests a clean shutdown: the next WM_CLOSE (or an immediate one) destroys the window and
+    // posts WM_QUIT. Ordinary WM_CLOSE hides the overlay so the tray stays available.
+    void Quit();
 
     [[nodiscard]] HWND Hwnd() const noexcept
     {
@@ -136,6 +147,9 @@ class OverlayWindow
     // Invoked when the window is destroyed (defaults to posting WM_QUIT).
     void SetCloseCallback(CloseCallback callback);
 
+    // Invoked on WM_ENDSESSION before the placement is published, so the app can persist config.
+    void SetSessionEndingCallback(SessionEndingCallback callback);
+
     // Invoked for context-menu commands the window does not own (Settings/History/Specs).
     void SetCommandCallback(CommandCallback callback);
 
@@ -187,8 +201,10 @@ class OverlayWindow
     PositionChangedCallback positionChanged_;
     CloseCallback closeCallback_;
     CommandCallback commandCallback_;
+    SessionEndingCallback sessionEndingCallback_;
     VisibilityChangedCallback visibilityChanged_;
     bool renderingSuspended_ = false;
+    bool quitRequested_ = false;
     bool sessionNotificationsRegistered_ = false;
     std::wstring diagnostics_;
 };

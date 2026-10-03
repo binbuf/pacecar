@@ -254,6 +254,47 @@ void OverlayWindow::Show(int cmdShow)
     NotifyVisibilityChanged();
 }
 
+void OverlayWindow::SetVisible(bool visible)
+{
+    if (hwnd_ == nullptr)
+    {
+        return;
+    }
+    if (visible)
+    {
+        ShowWindow(hwnd_, SW_SHOWNORMAL);
+        ReassertTopmost();
+        Invalidate();
+        RefreshSuspension(L"show");
+        NotifyVisibilityChanged();
+    }
+    else
+    {
+        ShowWindow(hwnd_, SW_HIDE);
+        RefreshSuspension(L"hide");
+        NotifyVisibilityChanged();
+    }
+}
+
+void OverlayWindow::ToggleVisibility()
+{
+    SetVisible(!IsVisible());
+}
+
+bool OverlayWindow::IsVisible() const noexcept
+{
+    return hwnd_ != nullptr && IsWindowVisible(hwnd_) != FALSE;
+}
+
+void OverlayWindow::Quit()
+{
+    // Let the message loop exit and the destructor destroy the window (the same shutdown path the
+    // measure mode uses). Destroying the window mid-loop while the renderer is still alive is
+    // avoided on purpose.
+    quitRequested_ = true;
+    PostQuitMessage(0);
+}
+
 void OverlayWindow::SetClickThrough(bool enabled)
 {
     if (hwnd_ == nullptr || clickThrough_ == enabled)
@@ -422,6 +463,11 @@ void OverlayWindow::SetCloseCallback(CloseCallback callback)
     closeCallback_ = std::move(callback);
 }
 
+void OverlayWindow::SetSessionEndingCallback(SessionEndingCallback callback)
+{
+    sessionEndingCallback_ = std::move(callback);
+}
+
 void OverlayWindow::SetCommandCallback(CommandCallback callback)
 {
     commandCallback_ = std::move(callback);
@@ -527,11 +573,28 @@ LRESULT OverlayWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         OnDisplayChange();
         return 0;
     case WM_EXITSIZEMOVE:
+        PublishPlacement();
+        break;
     case WM_ENDSESSION:
+        if (sessionEndingCallback_)
+        {
+            sessionEndingCallback_();
+        }
         PublishPlacement();
         break;
     case WM_CLOSE:
-        DestroyWindow(hwnd_);
+        // Ordinary close hides to the tray; an explicit Quit() destroys the window. This keeps the
+        // tray icon available until the user picks Exit.
+        if (quitRequested_)
+        {
+            DestroyWindow(hwnd_);
+        }
+        else
+        {
+            ShowWindow(hwnd_, SW_HIDE);
+            RefreshSuspension(L"close-hide");
+            NotifyVisibilityChanged();
+        }
         return 0;
     case WM_DESTROY:
         if (sessionNotificationsRegistered_ && hwnd_ != nullptr)
@@ -783,10 +846,20 @@ void OverlayWindow::ExecuteCommand(OverlayCommand command)
         ToggleClickThrough();
         break;
     case OverlayCommand::Hide:
-        ShowWindow(hwnd_, SW_HIDE);
+        SetVisible(false);
+        break;
+    case OverlayCommand::ToggleVisibility:
+        ToggleVisibility();
         break;
     case OverlayCommand::Exit:
-        PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+        Quit();
+        break;
+    case OverlayCommand::CopySystemInfo:
+    case OverlayCommand::About:
+        if (commandCallback_)
+        {
+            commandCallback_(command);
+        }
         break;
     case OverlayCommand::Settings:
     case OverlayCommand::History:

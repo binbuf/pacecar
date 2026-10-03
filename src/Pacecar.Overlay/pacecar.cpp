@@ -1,8 +1,8 @@
 // pacecar.cpp : Overlay host process.
 //
-// Phase 1 keeps the overlay minimal: it creates the window/renderer, wires placement persistence,
-// and (when asked) reports Phase 0 measurements. Real widgets (T10), layout (T11), sampling (T12),
-// and tray/hotkey (T13) build on the `IRenderer`/`OverlayWindow` boundary established here.
+// The app shell: command-line parse, config load, per-user single-instance guard, overlay window,
+// tray icon, global hotkeys, sampler, helper stub, and the full shutdown path (debounced config
+// save on exit, WM_ENDSESSION, and console Ctrl+C).
 //
 // Command line:
 //   --recipe=a|b        layered (default) or DirectComposition prototype
@@ -14,26 +14,45 @@
 //   --diagnostics       print the renderer/HDR/capture findings and exit immediately
 //   --position=X,Y,W,H  force the window rectangle (physical pixels) instead of the saved/config
 //                       placement; used by the cross-process click-through probe
+//   --config=PATH       load/save config at PATH instead of %APPDATA%\Pacecar\config.json
+//   --instance=SUFFIX   override the single-instance suffix (tests use a unique value)
+//   --start-hidden      start hidden (tray only)
+//   --no-tray           do not create the tray icon (tests / measure)
+//   --no-hotkey         do not register global hotkeys (tests / measure)
+//   --exit-after=MS     cleanly exit MS milliseconds after startup (integration tests)
+//   --lifecycle-log=PATH  append lifecycle events (started/activation/shutdown) to PATH
 
 #include "framework.h"
 #include "pacecar.h"
 
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <cwchar>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #include <shellapi.h>
 #include <objbase.h>
 
 #include "Diagnostics.h"
+#include "HelperClient.h"
 #include "Hdr.h"
+#include "Hotkey.h"
 #include "OverlayWindow.h"
 #include "Sampler.h"
+#include "SingleInstance.h"
+#include "Tray.h"
+#include "pacecar/app/AppIdentity.h"
+#include "pacecar/app/HotkeySpec.h"
+#include "pacecar/app/StartWithWindows.h"
+#include "pacecar/app/TrayTooltip.h"
 #include "pacecar/config/Config.h"
 #include "pacecar/core.h"
 #include "pacecar/metrics/DisplayFrame.h"
@@ -44,6 +63,33 @@
 
 namespace
 {
+// Posted by the console control handler to ask the UI thread to persist config and quit.
+constexpr UINT kSaveAndQuitMessage = WM_APP + 4;
+constexpr UINT_PTR kMeasureTimerId = 1;
+constexpr UINT_PTR kExitTimerId = 2;
+
+HWND g_signalWindow = nullptr;
+
+BOOL WINAPI SaveAndQuitHandler(DWORD ctrlType)
+{
+    switch (ctrlType)
+    {
+    case CTRL_C_EVENT:
+    case CTRL_BREAK_EVENT:
+    case CTRL_CLOSE_EVENT:
+    case CTRL_LOGOFF_EVENT:
+    case CTRL_SHUTDOWN_EVENT:
+        if (g_signalWindow != nullptr)
+        {
+            PostMessageW(g_signalWindow, kSaveAndQuitMessage, 0, 0);
+            return TRUE;
+        }
+        return FALSE;
+    default:
+        return FALSE;
+    }
+}
+
 struct CommandLineOptions
 {
     pacecar::overlay::OverlayRecipe recipe = pacecar::overlay::OverlayRecipe::Layered;
@@ -57,6 +103,13 @@ struct CommandLineOptions
     bool assertTimerResolution = false;
     std::wstring outputFile{};
     std::optional<pacecar::MonitorRect> position{};
+    std::filesystem::path configPath{};
+    std::wstring instanceSuffix{};
+    bool startHidden = false;
+    bool noTray = false;
+    bool noHotkey = false;
+    std::optional<unsigned> exitAfterMs{};
+    std::wstring lifecycleLog{};
 };
 
 void EnableConsole()
@@ -69,6 +122,112 @@ void EnableConsole()
     freopen_s(&stream, "CONOUT$", "w", stdout);
     freopen_s(&stream, "CONOUT$", "w", stderr);
     freopen_s(&stream, "CONIN$", "r", stdin);
+}
+
+std::wstring Utf8ToWide(std::string_view text)
+{
+    if (text.empty())
+    {
+        return {};
+    }
+    const int length =
+        MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+    if (length <= 0)
+    {
+        return {};
+    }
+    std::wstring wide(static_cast<std::size_t>(length), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), wide.data(), length);
+    return wide;
+}
+
+void AppendLifecycleLog(const std::wstring& path, std::wstring_view event)
+{
+    if (path.empty())
+    {
+        return;
+    }
+    std::ofstream file(path, std::ios::app | std::ios::binary);
+    if (!file)
+    {
+        return;
+    }
+    file << "event=";
+    for (const wchar_t c : event)
+    {
+        file << static_cast<char>(c);
+    }
+    file << "\n";
+}
+
+std::uint32_t ForegroundProcessId()
+{
+    const HWND foreground = GetForegroundWindow();
+    if (foreground == nullptr)
+    {
+        return 0;
+    }
+    DWORD pid = 0;
+    static_cast<void>(GetWindowThreadProcessId(foreground, &pid));
+    return pid;
+}
+
+void CopyTextToClipboard(HWND owner, const std::wstring& text)
+{
+    if (OpenClipboard(owner) == FALSE)
+    {
+        return;
+    }
+    EmptyClipboard();
+    const std::size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (memory != nullptr)
+    {
+        void* destination = GlobalLock(memory);
+        if (destination != nullptr)
+        {
+            memcpy(destination, text.c_str(), bytes);
+            GlobalUnlock(memory);
+            if (SetClipboardData(CF_UNICODETEXT, memory) == nullptr)
+            {
+                GlobalFree(memory);
+            }
+        }
+        else
+        {
+            GlobalFree(memory);
+        }
+    }
+    CloseClipboard();
+}
+
+void SyncStartWithWindows(const pacecar::Config& config)
+{
+    wchar_t executable[MAX_PATH] = {};
+    if (GetModuleFileNameW(nullptr, executable, MAX_PATH) == 0)
+    {
+        return;
+    }
+    std::wstring existing;
+    const bool present = pacecar::app::ReadStartupValue(
+        pacecar::app::kStartupRunKey, pacecar::app::kStartupValueName, existing);
+    if (config.general.start_with_windows)
+    {
+        const std::wstring desired =
+            pacecar::app::BuildStartupCommand(executable, config.general.start_hidden);
+        if (!present || existing != desired)
+        {
+            std::wstring error;
+            static_cast<void>(pacecar::app::WriteStartupValue(
+                pacecar::app::kStartupRunKey, pacecar::app::kStartupValueName, desired, &error));
+        }
+    }
+    else if (present)
+    {
+        std::wstring error;
+        static_cast<void>(pacecar::app::DeleteStartupValue(
+            pacecar::app::kStartupRunKey, pacecar::app::kStartupValueName, &error));
+    }
 }
 
 CommandLineOptions ParseCommandLine()
@@ -117,6 +276,18 @@ CommandLineOptions ParseCommandLine()
         {
             options.assertTimerResolution = true;
         }
+        else if (arg == L"--start-hidden")
+        {
+            options.startHidden = true;
+        }
+        else if (arg == L"--no-tray")
+        {
+            options.noTray = true;
+        }
+        else if (arg == L"--no-hotkey")
+        {
+            options.noHotkey = true;
+        }
         else if (arg == L"--measure")
         {
             options.measure = true;
@@ -133,9 +304,33 @@ CommandLineOptions ParseCommandLine()
                 options.measureSeconds = 5;
             }
         }
+        else if (arg.starts_with(L"--exit-after="))
+        {
+            try
+            {
+                options.exitAfterMs =
+                    static_cast<unsigned>(std::stoul(std::wstring(arg.substr(13))));
+            }
+            catch (...)
+            {
+                options.exitAfterMs = 0;
+            }
+        }
         else if (arg.starts_with(L"--out="))
         {
             options.outputFile = arg.substr(6);
+        }
+        else if (arg.starts_with(L"--config="))
+        {
+            options.configPath = std::filesystem::path(std::wstring(arg.substr(9)));
+        }
+        else if (arg.starts_with(L"--instance="))
+        {
+            options.instanceSuffix = arg.substr(11);
+        }
+        else if (arg.starts_with(L"--lifecycle-log="))
+        {
+            options.lifecycleLog = arg.substr(16);
         }
         else if (arg.starts_with(L"--position="))
         {
@@ -170,8 +365,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    const HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED |
-                                                         COINIT_DISABLE_OLE1DDE);
+    const HRESULT comResult =
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     const bool comInitialized = SUCCEEDED(comResult);
 
     CommandLineOptions commandLine = ParseCommandLine();
@@ -182,7 +377,45 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     [[maybe_unused]] const std::string_view coreVersion = pacecar::CoreVersion();
 
-    pacecar::Config config = pacecar::Config::Load();
+    pacecar::Config config = commandLine.configPath.empty()
+                                 ? pacecar::Config::Load()
+                                 : pacecar::Config::Load(commandLine.configPath);
+
+    const bool shellMode = !commandLine.measure && !commandLine.diagnosticsOnly;
+    // Tests inject a unique instance suffix; skip the HKCU Run sync so they never touch the real
+    // per-user startup entry.
+    const bool testMode = !commandLine.instanceSuffix.empty();
+    const auto logEvent = [&commandLine](std::wstring_view event)
+    { AppendLifecycleLog(commandLine.lifecycleLog, event); };
+
+    std::wstring instanceSuffix = commandLine.instanceSuffix;
+    if (instanceSuffix.empty())
+    {
+        instanceSuffix = pacecar::app::CurrentUserSid();
+    }
+    if (instanceSuffix.empty())
+    {
+        instanceSuffix = L"default";
+    }
+
+    pacecar::overlay::SingleInstance singleInstance;
+    if (shellMode)
+    {
+        bool alreadyRunning = false;
+        if (singleInstance.Acquire(instanceSuffix, alreadyRunning) && alreadyRunning)
+        {
+            static_cast<void>(pacecar::overlay::SingleInstance::NotifyExisting(instanceSuffix));
+            logEvent(L"secondary-exit");
+            if (comInitialized)
+            {
+                CoUninitialize();
+            }
+            return 0;
+        }
+    }
+
+    pacecar::overlay::HelperClient helper;
+    static_cast<void>(helper.TryConnect());
 
     std::optional<pacecar::MonitorRect> savedRect;
     for (const pacecar::MonitorRect& rect : config.overlay.monitor_rects)
@@ -234,8 +467,21 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     // toggles) without recreating the window.
     overlay.ApplyConfig(config);
 
+    const auto saveConfig = [&config, &commandLine]
+    {
+        if (commandLine.configPath.empty())
+        {
+            static_cast<void>(config.Save());
+        }
+        else
+        {
+            static_cast<void>(config.Save(commandLine.configPath));
+        }
+    };
+    pacecar::DebouncedSaver saver(saveConfig);
+
     overlay.SetPositionChangedCallback(
-        [&config](const pacecar::MonitorRect& rect)
+        [&config, &saver](const pacecar::MonitorRect& rect)
         {
             bool replaced = false;
             for (pacecar::MonitorRect& existing : config.overlay.monitor_rects)
@@ -252,24 +498,165 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                 config.overlay.monitor_rects.push_back(rect);
             }
             config.overlay.monitor_id = rect.monitor_id;
-            static_cast<void>(config.Save());
+            saver.Touch();
         });
+    overlay.SetSessionEndingCallback([&saveConfig] { saveConfig(); });
 
-    overlay.Show(nCmdShow);
+    pacecar::overlay::Sampler sampler;
+
+    // Global shell: single-instance activation, tray, hotkeys. Measure runs keep the minimal
+    // behavior the probes rely on.
+    pacecar::overlay::Tray tray;
+    bool trayCreated = false;
+    pacecar::overlay::HotkeyManager hotkeys;
+
+    const auto refreshShellFlags = [&overlay, &tray, trayCreated]
+    {
+        if (trayCreated)
+        {
+            tray.SetVisibleFlag(overlay.IsVisible());
+            tray.SetClickThroughFlag(overlay.ClickThrough());
+        }
+    };
+
+    if (shellMode)
+    {
+        static_cast<void>(singleInstance.CreateActivationWindow(
+            hInstance,
+            [&overlay, &logEvent, &refreshShellFlags]
+            {
+                overlay.SetVisible(true);
+                refreshShellFlags();
+                logEvent(L"activation");
+            }));
+
+        if (!testMode)
+        {
+            SyncStartWithWindows(config);
+        }
+
+        const auto handleCommand = [&](pacecar::overlay::OverlayCommand command)
+        {
+            switch (command)
+            {
+            case pacecar::overlay::OverlayCommand::ToggleVisibility:
+                overlay.ToggleVisibility();
+                refreshShellFlags();
+                break;
+            case pacecar::overlay::OverlayCommand::Mode:
+                overlay.ToggleClickThrough();
+                refreshShellFlags();
+                break;
+            case pacecar::overlay::OverlayCommand::Hide:
+                overlay.SetVisible(false);
+                refreshShellFlags();
+                break;
+            case pacecar::overlay::OverlayCommand::Exit:
+                overlay.Quit();
+                break;
+            case pacecar::overlay::OverlayCommand::CopySystemInfo:
+            {
+                std::wstring info = L"Pacecar " + Utf8ToWide(pacecar::CoreVersion()) + L"\n";
+                info += overlay.Diagnostics() + L"\n";
+                info += sampler.Diagnostics() + L"\n";
+                info += L"helper: " + helper.Status() + L"\n";
+                CopyTextToClipboard(overlay.Hwnd(), info);
+                break;
+            }
+            case pacecar::overlay::OverlayCommand::About:
+                MessageBoxW(overlay.Hwnd(), L"Pacecar 2.0\nSystem metrics overlay",
+                            L"About Pacecar", MB_OK | MB_ICONINFORMATION);
+                break;
+            case pacecar::overlay::OverlayCommand::Settings:
+            case pacecar::overlay::OverlayCommand::History:
+            case pacecar::overlay::OverlayCommand::Specs:
+                pacecar::LogWarn(
+                    L"overlay: Settings/History/Specs windows are not available yet (T14)");
+                break;
+            default:
+                break;
+            }
+        };
+
+        if (!commandLine.noTray)
+        {
+            trayCreated = tray.Create(hInstance, IDI_PACECAR, L"Pacecar");
+            if (trayCreated)
+            {
+                tray.SetCommandCallback(handleCommand);
+                tray.SetVisibleFlag(true);
+                tray.SetClickThroughFlag(overlay.ClickThrough());
+            }
+        }
+
+        if (!commandLine.noHotkey)
+        {
+            hotkeys.Attach(overlay.Hwnd());
+            hotkeys.SetCallback(
+                [&](int hotkeyId)
+                {
+                    if (hotkeyId == pacecar::overlay::HotkeyManager::kToggleOverlayId)
+                    {
+                        overlay.ToggleVisibility();
+                    }
+                    else if (hotkeyId == pacecar::overlay::HotkeyManager::kToggleClickThroughId)
+                    {
+                        overlay.ToggleClickThrough();
+                    }
+                    refreshShellFlags();
+                });
+
+            const std::wstring overlayHotkey = Utf8ToWide(config.hotkeys.toggle_overlay);
+            const pacecar::app::HotkeyParseResult overlayParse =
+                pacecar::app::ParseHotkey(overlayHotkey);
+            if (overlayParse.ok())
+            {
+                static_cast<void>(hotkeys.Register(
+                    pacecar::overlay::HotkeyManager::kToggleOverlayId, overlayParse.binding));
+            }
+            else
+            {
+                pacecar::LogWarn(L"hotkey: invalid overlay hotkey in config: " + overlayHotkey);
+            }
+
+            const std::wstring clickThroughHotkey =
+                Utf8ToWide(config.hotkeys.toggle_click_through);
+            if (!clickThroughHotkey.empty())
+            {
+                const pacecar::app::HotkeyParseResult clickParse =
+                    pacecar::app::ParseHotkey(clickThroughHotkey);
+                if (clickParse.ok())
+                {
+                    static_cast<void>(hotkeys.Register(
+                        pacecar::overlay::HotkeyManager::kToggleClickThroughId,
+                        clickParse.binding));
+                }
+                else
+                {
+                    pacecar::LogWarn(L"hotkey: invalid click-through hotkey in config: " +
+                                     clickThroughHotkey);
+                }
+            }
+        }
+
+        g_signalWindow = overlay.Hwnd();
+        SetConsoleCtrlHandler(SaveAndQuitHandler, TRUE);
+    }
+
+    overlay.Show((config.general.start_hidden || commandLine.startHidden) ? SW_HIDE : nCmdShow);
     overlay.Invalidate();
     const double firstPaintMs =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime)
             .count();
 
-    pacecar::overlay::ProcessUsage baseline = pacecar::overlay::QueryProcessUsage();
-
-    pacecar::overlay::Sampler sampler;
+    const pacecar::overlay::ProcessUsage baseline = pacecar::overlay::QueryProcessUsage();
 
     const auto emitReport = [&](const pacecar::overlay::ProcessUsage& finalUsage)
     {
         std::wstring report;
         report += L"diagnostics: " + overlay.Diagnostics() + L"\n";
         report += L"sampler:     " + sampler.Diagnostics() + L"\n";
+        report += L"helper:      " + helper.Status() + L"\n";
         report += L"overhead:    " + pacecar::overlay::FormatProcessUsage(finalUsage) + L"\n";
 
         wchar_t firstPaintLine[96] = {};
@@ -340,6 +727,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         }
         if (renderGate.ShouldRepaintFingerprint(frame->fingerprint, elapsedMs()))
         {
+            if (frame->snapshot)
+            {
+                if (trayCreated)
+                {
+                    tray.SetTooltip(pacecar::app::FormatTrayTooltip(*frame->snapshot));
+                }
+                sampler.SetForegroundPid(ForegroundProcessId());
+            }
             overlay.SetFrame(std::move(frame));
             overlay.Invalidate();
         }
@@ -363,46 +758,76 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     if (commandLine.measure)
     {
-        SetTimer(overlay.Hwnd(), 1, static_cast<UINT>(commandLine.measureSeconds > 0
-                                                          ? commandLine.measureSeconds
-                                                          : 1) *
-                                         1000u,
+        SetTimer(overlay.Hwnd(), kMeasureTimerId,
+                 static_cast<UINT>(commandLine.measureSeconds > 0 ? commandLine.measureSeconds : 1) *
+                     1000u,
                  nullptr);
     }
+    else if (commandLine.exitAfterMs.has_value())
+    {
+        SetTimer(overlay.Hwnd(), kExitTimerId, *commandLine.exitAfterMs, nullptr);
+    }
+
+    logEvent(L"started");
 
     MSG message{};
     while (GetMessageW(&message, nullptr, 0, 0) > 0)
     {
-        if (message.hwnd == overlay.Hwnd() && message.message == WM_TIMER && message.wParam == 1)
+        if (message.hwnd == overlay.Hwnd())
         {
-            KillTimer(overlay.Hwnd(), 1);
-            break;
-        }
-        if (message.hwnd == overlay.Hwnd() && message.message == pacecar::overlay::WM_APP_METRICS_UPDATED)
-        {
-            applyFrame(sampler.LatestFrame());
-            continue;
-        }
-        if (message.hwnd == overlay.Hwnd() && message.message == pacecar::overlay::WM_APP_CACHE_READY)
-        {
-            std::shared_ptr<pacecar::metrics::MetricsSnapshot> snap;
+            if (message.message == WM_TIMER && message.wParam == kMeasureTimerId)
             {
-                std::lock_guard<std::mutex> lock(cacheMutex);
-                snap = cachedSnapshot;
+                KillTimer(overlay.Hwnd(), kMeasureTimerId);
+                break;
             }
-            if (snap)
+            if (message.message == WM_TIMER && message.wParam == kExitTimerId)
             {
-                static pacecar::metrics::MetricHistory emptyHistory(0);
-                auto frame = std::make_shared<pacecar::metrics::DisplayFrame>(
-                    pacecar::metrics::BuildDisplayFrame(std::move(snap), emptyHistory));
-                applyFrame(std::move(frame));
+                KillTimer(overlay.Hwnd(), kExitTimerId);
+                saveConfig();
+                overlay.Quit();
+                continue;
             }
-            continue;
+            if (message.message == pacecar::overlay::WM_APP_METRICS_UPDATED)
+            {
+                applyFrame(sampler.LatestFrame());
+                continue;
+            }
+            if (message.message == pacecar::overlay::WM_APP_CACHE_READY)
+            {
+                std::shared_ptr<pacecar::metrics::MetricsSnapshot> snap;
+                {
+                    std::lock_guard<std::mutex> lock(cacheMutex);
+                    snap = cachedSnapshot;
+                }
+                if (snap)
+                {
+                    static pacecar::metrics::MetricHistory emptyHistory(0);
+                    auto frame = std::make_shared<pacecar::metrics::DisplayFrame>(
+                        pacecar::metrics::BuildDisplayFrame(std::move(snap), emptyHistory));
+                    applyFrame(std::move(frame));
+                }
+                continue;
+            }
+            if (message.message == WM_HOTKEY)
+            {
+                static_cast<void>(hotkeys.HandleHotkey(static_cast<int>(message.wParam)));
+                continue;
+            }
+            if (message.message == kSaveAndQuitMessage)
+            {
+                saveConfig();
+                overlay.Quit();
+                continue;
+            }
         }
         TranslateMessage(&message);
         DispatchMessageW(&message);
     }
 
+    if (shellMode)
+    {
+        saveConfig();
+    }
     sampler.Stop();
     if (const auto latest = sampler.LatestSnapshot())
     {
@@ -412,6 +837,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     if (cacheThread.joinable())
     {
         cacheThread.join();
+    }
+
+    if (shellMode)
+    {
+        g_signalWindow = nullptr;
+        hotkeys.UnregisterAll();
+        tray.Destroy();
+        helper.Disconnect();
+        logEvent(L"shutdown");
     }
 
     const pacecar::TimerResolution timerEnd = pacecar::QueryTimerResolution();

@@ -20,12 +20,25 @@ enum class OverlayCommand : std::uint16_t
     Specs = 4,
     Hide = 5,
     Exit = 6,
+    // Tray-only commands (design ref 04-ui-ux.md "Tray"). `ToggleVisibility` is Show/Hide as one
+    // item; `Hide` stays in the overlay context menu.
+    ToggleVisibility = 7,
+    CopySystemInfo = 8,
+    About = 9,
 };
 
-// Menu items in display order. The menu command id is the underlying enum value.
+// Overlay right-click menu items in display order. The menu command id is the underlying enum value.
 inline constexpr std::array<OverlayCommand, 6> kContextMenuCommands{
     OverlayCommand::Mode,     OverlayCommand::Settings, OverlayCommand::History,
     OverlayCommand::Specs,    OverlayCommand::Hide,     OverlayCommand::Exit,
+};
+
+// Tray menu items in display order: Show/Hide, Mode, Settings, History, Copy system info, About,
+// Exit (design ref 04-ui-ux.md "Tray").
+inline constexpr std::array<OverlayCommand, 7> kTrayMenuCommands{
+    OverlayCommand::ToggleVisibility, OverlayCommand::Mode,     OverlayCommand::Settings,
+    OverlayCommand::History,          OverlayCommand::CopySystemInfo, OverlayCommand::About,
+    OverlayCommand::Exit,
 };
 
 // The display label for a command (stable static storage).
@@ -45,16 +58,22 @@ inline constexpr std::array<OverlayCommand, 6> kContextMenuCommands{
         return L"Hide";
     case OverlayCommand::Exit:
         return L"Exit";
+    case OverlayCommand::ToggleVisibility:
+        return L"Show/Hide";
+    case OverlayCommand::CopySystemInfo:
+        return L"Copy system info";
+    case OverlayCommand::About:
+        return L"About";
     case OverlayCommand::None:
     default:
         return L"";
     }
 }
 
-// True when `id` is one of the context menu command ids (used to validate WM_COMMAND/TrackPopupMenu).
+// True when `id` is one of the command ids (used to validate WM_COMMAND/TrackPopupMenu).
 [[nodiscard]] inline bool IsOverlayCommand(unsigned id) noexcept
 {
     return id >= static_cast<unsigned>(OverlayCommand::Mode) &&
-           id <= static_cast<unsigned>(OverlayCommand::Exit);
+           id <= static_cast<unsigned>(OverlayCommand::About);
 }
 } // namespace pacecar::overlay
