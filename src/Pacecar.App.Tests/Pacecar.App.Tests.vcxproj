@@ -92,6 +92,7 @@
     <ClCompile Include="pdh_test.cpp" />
     <ClCompile Include="ping_provider_test.cpp" />
     <ClCompile Include="ring_buffer_test.cpp" />
+    <ClCompile Include="sampling_test.cpp" />
     <ClCompile Include="smoke_test.cpp" />
     <ClCompile Include="smoothing_test.cpp" />
     <ClCompile Include="text_cache_test.cpp" />

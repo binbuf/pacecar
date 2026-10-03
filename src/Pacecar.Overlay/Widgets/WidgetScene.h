@@ -6,11 +6,13 @@
 // so a steady-state redraw of unchanged content performs no heap allocation.
 
 #include <array>
+#include <memory>
 
 #include "Header.h"
 #include "Panel.h"
 #include "Tile.h"
 #include "WidgetStyles.h"
+#include "pacecar/metrics/DisplayFrame.h"
 #include "pacecar/overlay/Layout.h"
 #include "pacecar/overlay/Theme.h"
 
@@ -27,6 +29,14 @@ class WidgetScene
     void SetLayout(const LayoutSettings& settings) noexcept
     {
         settings_ = settings;
+    }
+
+    // Publishes the latest metrics frame (snapshot + sparkline tails). The scene keeps the shared
+    // pointer and formats it during Draw; a null frame shows the neutral placeholders used before
+    // the first sample or on a cold start.
+    void SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame) noexcept
+    {
+        frame_ = std::move(frame);
     }
 
     // Drops cached text layouts (device loss / occlusion).
@@ -48,5 +58,15 @@ class WidgetScene
     LayoutSettings settings_ = DefaultLayoutSettings();
     std::array<Tile, kMaxTiles> tiles_{};
     std::array<float, kSparklineCapacity> demoHistory_{};
+    std::shared_ptr<const pacecar::metrics::DisplayFrame> frame_{};
+    // Scratch buffers reused for each formatted tile so a steady-state draw allocates nothing.
+    std::array<std::array<wchar_t, 32>, kMaxTiles> primaryBuffers_{};
+    std::array<std::array<wchar_t, 64>, kMaxTiles> secondaryBuffers_{};
+    std::array<std::array<wchar_t, 32>, kMaxTiles> tertiaryBuffers_{};
+
+    void DrawDemoTile(ID2D1RenderTarget* target, const TilePlacement& placement, std::size_t index,
+                      const ResolvedTheme& theme);
+    void DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& placement, std::size_t index,
+                      const ResolvedTheme& theme);
 };
 } // namespace pacecar::overlay

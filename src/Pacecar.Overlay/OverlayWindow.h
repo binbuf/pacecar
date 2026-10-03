@@ -26,6 +26,15 @@
 
 namespace pacecar::overlay
 {
+// Posted by the sampler to the overlay window (no parameters) when a new metrics frame is published
+// and the overlay is visible. The UI formats the frame and repaints only if the render gate says
+// the visible values changed. Part of the sampler/UI contract; see Sampler.h.
+inline constexpr UINT WM_APP_METRICS_UPDATED = WM_APP + 1;
+
+// Posted by the background cache-load thread once the last snapshot has been read (or the read
+// failed). The UI then applies the cached frame if one was loaded.
+inline constexpr UINT WM_APP_CACHE_READY = WM_APP + 2;
+
 // How Recipe B attempts cross-process click-through. Recipe A does not need this: a layered window
 // with `WS_EX_TRANSPARENT` passes the whole window through by documented behavior.
 enum class CompositionClickThrough
@@ -56,6 +65,9 @@ class OverlayWindow
     using PositionChangedCallback = std::function<void(const pacecar::MonitorRect&)>;
     using CloseCallback = std::function<void()>;
     using CommandCallback = std::function<void(OverlayCommand)>;
+    // Reports the effective "should the sampler wake us?" visibility: the window is shown and not
+    // suspended for occlusion/session lock. The app forwards this to `Sampler::SetVisible`.
+    using VisibilityChangedCallback = std::function<void(bool visible)>;
 
     OverlayWindow();
     ~OverlayWindow();
@@ -94,8 +106,27 @@ class OverlayWindow
 // preset/toggle/theme changes take effect immediately (design ref 04-ui-ux.md).
     void ApplyConfig(const pacecar::Config& config);
 
-    // Marks the renderer dirty and presents immediately if the window is visible.
+    // Publishes a new metrics frame to the renderer (no-op when no renderer exists). The frame is held
+// until the next one; a null frame restores the placeholders.
+    void SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame);
+
+    // Marks the renderer dirty and presents immediately if the window is visible and not suspended.
     void Invalidate();
+
+    // Suspends presentation while the overlay is occluded or the session is locked (the design's
+    // "stop rendering while occluded" rule). While suspended `Invalidate` is a no-op; clearing the
+    // flag trims back in with a fresh present. Returns true when the state actually changed.
+    bool SetRenderingSuspended(bool suspended) noexcept;
+    [[nodiscard]] bool RenderingSuspended() const noexcept
+    {
+        return renderingSuspended_;
+    }
+
+    // Effective visibility: shown and not occluded/locked. The sampler wakes the UI only while this
+    // is true.
+    [[nodiscard]] bool EffectivelyVisible() const noexcept;
+
+    void SetVisibilityChangedCallback(VisibilityChangedCallback callback);
 
     // Handles a display configuration change: re-assert topmost and re-clamp the placement.
     void OnDisplayChange();
@@ -136,6 +167,10 @@ class OverlayWindow
     [[nodiscard]] LRESULT HitTestBorder(LPARAM lParam) const;
     void ShowContextMenu(POINT screenPoint);
     void ExecuteCommand(OverlayCommand command);
+    void RegisterSessionNotifications();
+    void RefreshSuspension(const wchar_t* reason);
+    [[nodiscard]] bool IsOccludedOrMinimized() const noexcept;
+    void NotifyVisibilityChanged();
     [[nodiscard]] unsigned WindowDpi() const;
     [[nodiscard]] HMONITOR CurrentMonitor() const;
     [[nodiscard]] pacecar::MonitorRect PlacementFor(const std::optional<pacecar::MonitorRect>& saved,
@@ -152,6 +187,9 @@ class OverlayWindow
     PositionChangedCallback positionChanged_;
     CloseCallback closeCallback_;
     CommandCallback commandCallback_;
+    VisibilityChangedCallback visibilityChanged_;
+    bool renderingSuspended_ = false;
+    bool sessionNotificationsRegistered_ = false;
     std::wstring diagnostics_;
 };
 

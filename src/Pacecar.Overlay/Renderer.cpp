@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cstdio>
 #include <string>
+#include <utility>
 
 #include <d2d1.h>
 #include <d3d11.h>
@@ -102,6 +103,12 @@ class LayeredRenderer final : public IRenderer
     void SetLayout(const LayoutSettings& layout) override
     {
         scene_.SetLayout(layout);
+        dirty_ = true;
+    }
+
+    void SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame) override
+    {
+        scene_.SetFrame(std::move(frame));
         dirty_ = true;
     }
 
@@ -402,6 +409,12 @@ class CompositionRenderer final : public IRenderer
     void SetLayout(const LayoutSettings& layout) override
     {
         scene_.SetLayout(layout);
+        dirty_ = true;
+    }
+
+    void SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame) override
+    {
+        scene_.SetFrame(std::move(frame));
         dirty_ = true;
     }
 

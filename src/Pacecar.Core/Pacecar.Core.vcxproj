@@ -67,6 +67,11 @@
     <ClInclude Include="include\pacecar\metrics\CpuTimes.h" />
     <ClInclude Include="include\pacecar\metrics\DeviceSelection.h" />
     <ClInclude Include="include\pacecar\metrics\DiskProvider.h" />
+    <ClInclude Include="include\pacecar\metrics\DisplayFrame.h" />
+    <ClInclude Include="include\pacecar\metrics\HistoryRetention.h" />
+    <ClInclude Include="include\pacecar\metrics\MetricsFingerprint.h" />
+    <ClInclude Include="include\pacecar\metrics\RenderGate.h" />
+    <ClInclude Include="include\pacecar\metrics\SnapshotCache.h" />
     <ClInclude Include="include\pacecar\metrics\GpuD3dKmtProvider.h" />
     <ClInclude Include="include\pacecar\metrics\GpuPdhProvider.h" />
     <ClInclude Include="include\pacecar\metrics\IMetricProvider.h" />
@@ -87,6 +92,7 @@
     <ClInclude Include="include\pacecar\util\Pdh.h" />
     <ClInclude Include="include\pacecar\util\RingBuffer.h" />
     <ClInclude Include="include\pacecar\util\Smoothing.h" />
+    <ClInclude Include="include\pacecar\util\TimerResolution.h" />
     <ClInclude Include="include\pacecar\util\Wil.h" />
   </ItemGroup>
   <ItemGroup>
@@ -97,6 +103,11 @@
     <ClCompile Include="src\metrics\CpuTimes.cpp" />
     <ClCompile Include="src\metrics\DeviceSelection.cpp" />
     <ClCompile Include="src\metrics\DiskProvider.cpp" />
+    <ClCompile Include="src\metrics\DisplayFrame.cpp" />
+    <ClCompile Include="src\metrics\HistoryRetention.cpp" />
+    <ClCompile Include="src\metrics\MetricsFingerprint.cpp" />
+    <ClCompile Include="src\metrics\RenderGate.cpp" />
+    <ClCompile Include="src\metrics\SnapshotCache.cpp" />
     <ClCompile Include="src\metrics\GpuD3dKmtProvider.cpp" />
     <ClCompile Include="src\metrics\GpuPdhProvider.cpp" />
     <ClCompile Include="src\metrics\MemoryProvider.cpp" />
@@ -111,6 +122,7 @@
     <ClCompile Include="src\util\Format.cpp" />
     <ClCompile Include="src\util\Logger.cpp" />
     <ClCompile Include="src\util\Pdh.cpp" />
+    <ClCompile Include="src\util\TimerResolution.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\..\build\Directory.Build.targets" />

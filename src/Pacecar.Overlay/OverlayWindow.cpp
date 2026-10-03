@@ -10,8 +10,10 @@
 #include <string>
 #include <utility>
 
+#include <dwmapi.h>
 #include <shellscalingapi.h>
 #include <windowsx.h>
+#include <wtsapi32.h>
 
 #include "Widgets/SystemTheme.h"
 #include "pacecar/overlay/Layout.h"
@@ -94,6 +96,11 @@ OverlayWindow::~OverlayWindow()
     renderer_.reset();
     if (hwnd_ != nullptr)
     {
+        if (sessionNotificationsRegistered_)
+        {
+            WTSUnRegisterSessionNotification(hwnd_);
+            sessionNotificationsRegistered_ = false;
+        }
         DestroyWindow(hwnd_);
         hwnd_ = nullptr;
     }
@@ -157,6 +164,7 @@ bool OverlayWindow::Create(HINSTANCE instance, const OverlayOptions& options,
 
         if (InitializeRenderer(recipe, placement))
         {
+            RegisterSessionNotifications();
             return true;
         }
 
@@ -242,6 +250,8 @@ void OverlayWindow::Show(int cmdShow)
     ShowWindow(hwnd_, cmdShow);
     ReassertTopmost();
     Invalidate();
+    RefreshSuspension(L"show");
+    NotifyVisibilityChanged();
 }
 
 void OverlayWindow::SetClickThrough(bool enabled)
@@ -319,9 +329,18 @@ void OverlayWindow::ApplyConfig(const pacecar::Config& config)
     Invalidate();
 }
 
-void OverlayWindow::Invalidate()
+void OverlayWindow::SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame)
 {
     if (renderer_ == nullptr)
+    {
+        return;
+    }
+    renderer_->SetFrame(std::move(frame));
+}
+
+void OverlayWindow::Invalidate()
+{
+    if (renderer_ == nullptr || renderingSuspended_)
     {
         return;
     }
@@ -330,6 +349,42 @@ void OverlayWindow::Invalidate()
     {
         renderer_->Present();
     }
+}
+
+bool OverlayWindow::SetRenderingSuspended(bool suspended) noexcept
+{
+    if (renderingSuspended_ == suspended)
+    {
+        return false;
+    }
+    renderingSuspended_ = suspended;
+    if (renderer_ != nullptr)
+    {
+        if (suspended)
+        {
+            renderer_->Trim();
+        }
+        else
+        {
+            renderer_->Invalidate();
+            if (hwnd_ != nullptr && IsWindowVisible(hwnd_))
+            {
+                renderer_->Present();
+            }
+        }
+    }
+    NotifyVisibilityChanged();
+    return true;
+}
+
+bool OverlayWindow::EffectivelyVisible() const noexcept
+{
+    return hwnd_ != nullptr && IsWindowVisible(hwnd_) && !renderingSuspended_;
+}
+
+void OverlayWindow::SetVisibilityChangedCallback(VisibilityChangedCallback callback)
+{
+    visibilityChanged_ = std::move(callback);
 }
 
 void OverlayWindow::OnDisplayChange()
@@ -439,9 +494,30 @@ LRESULT OverlayWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_SIZE:
-        if (wParam != SIZE_MINIMIZED)
+        if (wParam == SIZE_MINIMIZED)
         {
+            SetRenderingSuspended(true);
+        }
+        else
+        {
+            RefreshSuspension(L"size");
             ResizeRendererToWindow();
+        }
+        return 0;
+    case WM_WINDOWPOSCHANGED:
+        RefreshSuspension(L"windowpos");
+        break;
+    case WM_SHOWWINDOW:
+        RefreshSuspension(L"showwindow");
+        break;
+    case WM_WTSSESSION_CHANGE:
+        if (wParam == WTS_SESSION_LOCK)
+        {
+            RefreshSuspension(L"session-lock");
+        }
+        else if (wParam == WTS_SESSION_UNLOCK)
+        {
+            RefreshSuspension(L"session-unlock");
         }
         return 0;
     case WM_DPICHANGED:
@@ -458,6 +534,11 @@ LRESULT OverlayWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         DestroyWindow(hwnd_);
         return 0;
     case WM_DESTROY:
+        if (sessionNotificationsRegistered_ && hwnd_ != nullptr)
+        {
+            WTSUnRegisterSessionNotification(hwnd_);
+            sessionNotificationsRegistered_ = false;
+        }
         if (closeCallback_)
         {
             closeCallback_();
@@ -722,6 +803,58 @@ void OverlayWindow::ExecuteCommand(OverlayCommand command)
     case OverlayCommand::None:
     default:
         break;
+    }
+}
+
+void OverlayWindow::RegisterSessionNotifications()
+{
+    if (hwnd_ == nullptr || sessionNotificationsRegistered_)
+    {
+        return;
+    }
+    sessionNotificationsRegistered_ =
+        WTSRegisterSessionNotification(hwnd_, NOTIFY_FOR_THIS_SESSION) != FALSE;
+}
+
+void OverlayWindow::RefreshSuspension(const wchar_t* reason)
+{
+    if (hwnd_ == nullptr)
+    {
+        return;
+    }
+    const bool shouldSuspend = !IsWindowVisible(hwnd_) || IsOccludedOrMinimized();
+    if (SetRenderingSuspended(shouldSuspend) && reason != nullptr)
+    {
+        LogDebug(shouldSuspend ? L"overlay: rendering suspended" : L"overlay: rendering resumed");
+        static_cast<void>(reason);
+    }
+}
+
+bool OverlayWindow::IsOccludedOrMinimized() const noexcept
+{
+    if (hwnd_ == nullptr)
+    {
+        return true;
+    }
+    if (IsIconic(hwnd_))
+    {
+        return true;
+    }
+    int cloaked = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(hwnd_, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+        cloaked != 0)
+    {
+        // A cloaked window is on another virtual desktop / not composed.
+        return true;
+    }
+    return false;
+}
+
+void OverlayWindow::NotifyVisibilityChanged()
+{
+    if (visibilityChanged_)
+    {
+        visibilityChanged_(EffectivelyVisible());
     }
 }
 

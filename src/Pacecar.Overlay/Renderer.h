@@ -20,6 +20,7 @@
 
 #include <windows.h>
 
+#include "pacecar/metrics/DisplayFrame.h"
 #include "pacecar/overlay/Layout.h"
 #include "pacecar/overlay/Theme.h"
 
@@ -65,6 +66,10 @@ class IRenderer
 
     // Applies the config-driven layout preset/toggles. Takes effect on the next `Present`.
     virtual void SetLayout(const LayoutSettings& layout) = 0;
+
+    // Publishes a new metrics frame (snapshot + sparkline tails) for the widget scene. A null frame
+    // returns to the neutral placeholders. Takes effect on the next `Present`.
+    virtual void SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame) = 0;
 
     // Marks the content dirty so the next `Present` re-renders and publishes.
     virtual void Invalidate() noexcept = 0;

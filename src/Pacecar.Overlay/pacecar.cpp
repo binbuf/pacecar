@@ -18,10 +18,14 @@
 #include "framework.h"
 #include "pacecar.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cwchar>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 
 #include <shellapi.h>
 #include <objbase.h>
@@ -29,9 +33,14 @@
 #include "Diagnostics.h"
 #include "Hdr.h"
 #include "OverlayWindow.h"
+#include "Sampler.h"
 #include "pacecar/config/Config.h"
 #include "pacecar/core.h"
+#include "pacecar/metrics/DisplayFrame.h"
+#include "pacecar/metrics/RenderGate.h"
+#include "pacecar/metrics/SnapshotCache.h"
 #include "pacecar/util/Logger.h"
+#include "pacecar/util/TimerResolution.h"
 
 namespace
 {
@@ -45,6 +54,7 @@ struct CommandLineOptions
     bool measure = false;
     int measureSeconds = 5;
     bool diagnosticsOnly = false;
+    bool assertTimerResolution = false;
     std::wstring outputFile{};
     std::optional<pacecar::MonitorRect> position{};
 };
@@ -102,6 +112,10 @@ CommandLineOptions ParseCommandLine()
             options.diagnosticsOnly = true;
             options.measure = true;
             options.measureSeconds = 0;
+        }
+        else if (arg == L"--assert-timer-resolution")
+        {
+            options.assertTimerResolution = true;
         }
         else if (arg == L"--measure")
         {
@@ -199,6 +213,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     options.panelOpacity = config.general.opacity;
     options.theme = config.general.theme;
 
+    const auto startTime = std::chrono::steady_clock::now();
+    const pacecar::TimerResolution timerStart = pacecar::QueryTimerResolution();
+
     pacecar::overlay::OverlayWindow overlay;
     if (!overlay.Create(hInstance, options, savedRect))
     {
@@ -240,14 +257,32 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     overlay.Show(nCmdShow);
     overlay.Invalidate();
+    const double firstPaintMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime)
+            .count();
 
     pacecar::overlay::ProcessUsage baseline = pacecar::overlay::QueryProcessUsage();
+
+    pacecar::overlay::Sampler sampler;
 
     const auto emitReport = [&](const pacecar::overlay::ProcessUsage& finalUsage)
     {
         std::wstring report;
         report += L"diagnostics: " + overlay.Diagnostics() + L"\n";
+        report += L"sampler:     " + sampler.Diagnostics() + L"\n";
         report += L"overhead:    " + pacecar::overlay::FormatProcessUsage(finalUsage) + L"\n";
+
+        wchar_t firstPaintLine[96] = {};
+        swprintf_s(firstPaintLine, L"firstPaint:  %.1f ms\n", firstPaintMs);
+        report += firstPaintLine;
+
+        const pacecar::TimerResolution timerEnd = pacecar::QueryTimerResolution();
+        wchar_t timerLine[160] = {};
+        swprintf_s(timerLine, L"timerResolution: current=%.3f ms max=%.3f ms default=%s\n",
+                   timerEnd.CurrentMs(), timerEnd.MaximumMs(),
+                   pacecar::IsDefaultTimerResolution(timerEnd) ? L"yes" : L"no");
+        report += timerLine;
+
         if (commandLine.measureSeconds > 0)
         {
             const double windowSeconds = static_cast<double>(commandLine.measureSeconds);
@@ -280,6 +315,52 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         return 0;
     }
 
+    // Sampling runs entirely off the UI thread; it wakes this window only while it is effectively
+    // visible (shown and not occluded/locked).
+    static_cast<void>(sampler.Start(config, overlay.Hwnd()));
+    overlay.SetVisibilityChangedCallback(
+        [&sampler](bool visible) { sampler.SetVisible(visible); });
+    sampler.SetVisible(overlay.EffectivelyVisible());
+
+    pacecar::metrics::RenderGate renderGate(
+        std::chrono::milliseconds(static_cast<int>(config.general.refresh)));
+    const auto elapsedMs = [&startTime]() -> std::uint64_t
+    {
+        return static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                                                  startTime)
+                .count());
+    };
+
+    const auto applyFrame = [&](std::shared_ptr<const pacecar::metrics::DisplayFrame> frame)
+    {
+        if (!frame)
+        {
+            return;
+        }
+        if (renderGate.ShouldRepaintFingerprint(frame->fingerprint, elapsedMs()))
+        {
+            overlay.SetFrame(std::move(frame));
+            overlay.Invalidate();
+        }
+    };
+
+    // Load the cached last snapshot on a background thread so a cold start paints placeholders
+    // immediately and never waits on disk (design ref 05 "Startup").
+    std::mutex cacheMutex;
+    std::shared_ptr<pacecar::metrics::MetricsSnapshot> cachedSnapshot;
+    std::thread cacheThread(
+        [&overlay, &cacheMutex, &cachedSnapshot]
+        {
+            auto loaded = std::make_shared<pacecar::metrics::MetricsSnapshot>();
+            if (pacecar::metrics::LoadSnapshotCache(pacecar::metrics::SnapshotCachePath(), *loaded))
+            {
+                std::lock_guard<std::mutex> lock(cacheMutex);
+                cachedSnapshot = std::move(loaded);
+            }
+            PostMessageW(overlay.Hwnd(), pacecar::overlay::WM_APP_CACHE_READY, 0, 0);
+        });
+
     if (commandLine.measure)
     {
         SetTimer(overlay.Hwnd(), 1, static_cast<UINT>(commandLine.measureSeconds > 0
@@ -292,13 +373,57 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     MSG message{};
     while (GetMessageW(&message, nullptr, 0, 0) > 0)
     {
-        if (message.message == WM_TIMER && message.hwnd == overlay.Hwnd())
+        if (message.hwnd == overlay.Hwnd() && message.message == WM_TIMER && message.wParam == 1)
         {
             KillTimer(overlay.Hwnd(), 1);
             break;
         }
+        if (message.hwnd == overlay.Hwnd() && message.message == pacecar::overlay::WM_APP_METRICS_UPDATED)
+        {
+            applyFrame(sampler.LatestFrame());
+            continue;
+        }
+        if (message.hwnd == overlay.Hwnd() && message.message == pacecar::overlay::WM_APP_CACHE_READY)
+        {
+            std::shared_ptr<pacecar::metrics::MetricsSnapshot> snap;
+            {
+                std::lock_guard<std::mutex> lock(cacheMutex);
+                snap = cachedSnapshot;
+            }
+            if (snap)
+            {
+                static pacecar::metrics::MetricHistory emptyHistory(0);
+                auto frame = std::make_shared<pacecar::metrics::DisplayFrame>(
+                    pacecar::metrics::BuildDisplayFrame(std::move(snap), emptyHistory));
+                applyFrame(std::move(frame));
+            }
+            continue;
+        }
         TranslateMessage(&message);
         DispatchMessageW(&message);
+    }
+
+    sampler.Stop();
+    if (const auto latest = sampler.LatestSnapshot())
+    {
+        static_cast<void>(
+            pacecar::metrics::SaveSnapshotCache(*latest, pacecar::metrics::SnapshotCachePath()));
+    }
+    if (cacheThread.joinable())
+    {
+        cacheThread.join();
+    }
+
+    const pacecar::TimerResolution timerEnd = pacecar::QueryTimerResolution();
+    const bool timerUnchanged = pacecar::SameTimerResolution(timerStart, timerEnd);
+
+    int exitCode = 0;
+    if (commandLine.assertTimerResolution && !timerUnchanged)
+    {
+        std::wstring warning =
+            L"pacecar: timer resolution was raised during the run (no timeBeginPeriod expected)\n";
+        fputws(warning.c_str(), stderr);
+        exitCode = 2;
     }
 
     if (commandLine.measure)
@@ -310,5 +435,5 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     {
         CoUninitialize();
     }
-    return 0;
+    return exitCode;
 }
