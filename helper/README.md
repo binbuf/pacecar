@@ -32,6 +32,9 @@ dotnet build   helper/Pacecar.Sensors/Pacecar.Sensors.csproj -c Release
 dotnet publish helper/Pacecar.Sensors/Pacecar.Sensors.csproj -c Release
 ```
 
-The UI launches the published `Pacecar.Sensors.exe` on demand via `runas` when
-`sensors.deep_sensors` is enabled; the protocol is deployment-independent so a Windows service
-(LocalSystem) can be added later without a wire change.
+The UI (`Pacecar.Overlay/HelperLauncher`) launches the published `Pacecar.Sensors.exe` on demand via
+`runas` when the user enables **Deep sensors** in Settings, which prompts for elevation once; it
+terminates the helper it started when deep sensors are turned off or the app exits. The helper is
+looked up **beside the UI executable**, so packaging (T18) must place the published binary there. The
+protocol is deployment-independent, so a Windows service (LocalSystem) can be added later without a
+wire change.

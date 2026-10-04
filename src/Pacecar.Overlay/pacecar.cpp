@@ -44,6 +44,7 @@
 
 #include "Diagnostics.h"
 #include "Hdr.h"
+#include "HelperLauncher.h"
 #include "HistoryWindow.h"
 #include "Hotkey.h"
 #include "OverlayWindow.h"
@@ -508,6 +509,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     overlay.SetSessionEndingCallback([&saveConfig] { saveConfig(); });
 
     pacecar::overlay::Sampler sampler;
+    pacecar::overlay::HelperLauncher helperLauncher;
+    bool deepSensorsActive = false;
 
     // The repaint gate is created here (not with the frame pipeline below) so the Settings window's
     // live-apply path can retune its interval without recreating it.
@@ -532,6 +535,35 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         {
             tray.SetVisibleFlag(overlay.IsVisible());
             tray.SetClickThroughFlag(overlay.ClickThrough());
+        }
+    };
+
+    // On-demand deep-sensor helper lifecycle: enable the client/provider and launch the elevated
+    // helper (single UAC prompt) when the user turns deep sensors on; terminate the helper we
+    // started when they turn it off. The protocol is unchanged - only the launch is a shell concern.
+    const auto applyDeepSensors = [&sampler, &helperLauncher, &deepSensorsActive](bool enabled)
+    {
+        if (enabled == deepSensorsActive)
+        {
+            return;
+        }
+        deepSensorsActive = enabled;
+        sampler.SetDeepSensorsEnabled(enabled);
+        if (enabled)
+        {
+            const pacecar::overlay::HelperLaunchResult result = helperLauncher.EnsureElevated();
+            if (result.launched)
+            {
+                pacecar::LogInfo(L"deep sensors: " + result.message);
+            }
+            else
+            {
+                pacecar::LogWarn(L"deep sensors: " + result.message);
+            }
+        }
+        else
+        {
+            helperLauncher.Stop();
         }
     };
 
@@ -596,6 +628,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                 }
             }
             refreshShellFlags();
+            applyDeepSensors(config.sensors.deep_sensors);
             saver.Touch();
         };
 
@@ -813,6 +846,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     // Sampling runs entirely off the UI thread; it wakes this window only while it is effectively
     // visible (shown and not occluded/locked).
     static_cast<void>(sampler.Start(config, overlay.Hwnd()));
+    applyDeepSensors(config.sensors.deep_sensors);
     overlay.SetVisibilityChangedCallback(
         [&sampler](bool visible) { sampler.SetVisible(visible); });
     sampler.SetVisible(overlay.EffectivelyVisible());
@@ -947,6 +981,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         saveConfig();
     }
     sampler.Stop();
+    helperLauncher.Stop();
     if (const auto latest = sampler.LatestSnapshot())
     {
         static_cast<void>(

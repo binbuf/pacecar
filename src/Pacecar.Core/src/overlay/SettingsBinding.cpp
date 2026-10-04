@@ -376,6 +376,17 @@ void SettingsBinding::SetSensorEnabled(SensorToggle toggle, bool enabled)
     Changed();
 }
 
+bool SettingsBinding::DeepSensorsEnabled() const noexcept
+{
+    return config_.sensors.deep_sensors;
+}
+
+void SettingsBinding::SetDeepSensorsEnabled(bool enabled)
+{
+    config_.sensors.deep_sensors = enabled;
+    Changed();
+}
+
 std::string_view SettingsBinding::Selection(DeviceKind kind) const noexcept
 {
     switch (kind)

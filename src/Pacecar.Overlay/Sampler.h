@@ -76,6 +76,12 @@ class Sampler
     // One-line human-readable status (provider count, cadence, history capacity, QoS outcomes).
     [[nodiscard]] std::wstring Diagnostics() const;
 
+    // Enables/disables the optional elevated helper path without recreating the sampler. The helper
+    // provider stays registered either way; while disabled it reports the deep-sensor domain
+    // unavailable and leaves every other provider untouched. Returns true when the state changed.
+    bool SetDeepSensorsEnabled(bool enabled) noexcept;
+    [[nodiscard]] bool DeepSensorsEnabled() const noexcept;
+
     // Deep-sensor helper status for the About/diagnostics text: "off (disabled in settings)",
     // "connected", or an explanatory "unavailable ..." line.
     [[nodiscard]] std::wstring HelperStatus() const;
@@ -95,6 +101,7 @@ class Sampler
     std::shared_ptr<pacecar::metrics::SensorHelperClient> helperClient_;
     std::shared_ptr<pacecar::metrics::SensorHelperProvider> helperProvider_;
     pacecar::metrics::PawnIOStatus pawnIoStatus_ = pacecar::metrics::PawnIOStatus::Absent;
+    std::atomic<bool> deepSensorsEnabled_{false};
     std::thread thread_;
 
     mutable std::mutex mutex_;

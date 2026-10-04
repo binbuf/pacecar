@@ -47,6 +47,7 @@ constexpr int kIdTileMiniBase = 1200;
 constexpr int kIdTileVisComboBase = 1220;
 
 constexpr int kIdSensorToggleBase = 1300;
+constexpr int kIdDeepSensorsToggle = 1306; // after the six per-sensor toggles (1300..1305)
 constexpr int kIdDeviceComboBase = 1320;
 constexpr int kIdDiskTempCombo = 1330;
 constexpr int kIdFanModeCombo = 1331;
@@ -561,13 +562,21 @@ void SettingsWindow::BuildSensorsPage()
         L"Fan speed",       L"RAM temperature", L"Mainboard temperature"};
     for (int i = 0; i < 6; ++i)
     {
-        AddControl(page, CreateWindowExW(
-                             0, L"BUTTON", toggleNames[i],
+AddControl(page, CreateWindowExW(
+                              0, L"BUTTON", toggleNames[i],
                              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 176 + i * 24,
                              300, 22, hwnd_,
                              reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdSensorToggleBase + i)),
                              instance_, nullptr));
     }
+
+    AddControl(page, CreateWindowExW(
+                          0, L"BUTTON",
+                          L"Deep sensors (temps/fans; requires PawnIO + elevation)",
+                          WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 176 + 6 * 24, 340,
+                          22, hwnd_,
+                          reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdDeepSensorsToggle)), instance_,
+                          nullptr));
 
     AddControl(page, MakeLabel(hwnd_, instance_, L"Disk temp mode:", 340, 44, 130));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Fan mode:", 340, 72, 130));
@@ -745,6 +754,7 @@ void SettingsWindow::RefreshFromConfig()
     {
         setCheck(kIdSensorToggleBase + i, binding_->SensorEnabled(toggles[i]));
     }
+    setCheck(kIdDeepSensorsToggle, binding_->DeepSensorsEnabled());
 
     const std::array<DeviceKind, 4> kinds{DeviceKind::Gpu, DeviceKind::Cpu, DeviceKind::Nic,
                                           DeviceKind::Disk};
@@ -1000,6 +1010,12 @@ void SettingsWindow::OnCommand(int controlId, int notifyCode, HWND /*control*/)
             SensorToggle::DiskTemperature, SensorToggle::FanSpeed,
             SensorToggle::RamTemperature, SensorToggle::MainboardTemperature};
         binding_->SetSensorEnabled(toggles[index], isChecked(controlId));
+        return;
+    }
+
+    if (controlId == kIdDeepSensorsToggle)
+    {
+        binding_->SetDeepSensorsEnabled(isChecked(controlId));
         return;
     }
 

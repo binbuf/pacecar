@@ -142,6 +142,25 @@ TEST(SettingsBinding, MapsSensorControlsAndHistory)
     EXPECT_EQ(config.history.retention_minutes, kRetentionOptions.back());
 }
 
+TEST(SettingsBinding, MapsDeepSensorMasterToggle)
+{
+    Config config = MakeConfig();
+    int changes = 0;
+    SettingsBinding binding(config, [&changes] { ++changes; });
+
+    EXPECT_FALSE(binding.DeepSensorsEnabled());
+    EXPECT_FALSE(config.sensors.deep_sensors);
+
+    binding.SetDeepSensorsEnabled(true);
+    EXPECT_TRUE(config.sensors.deep_sensors);
+    EXPECT_TRUE(binding.DeepSensorsEnabled());
+    EXPECT_EQ(changes, 1);
+
+    binding.SetDeepSensorsEnabled(false);
+    EXPECT_FALSE(config.sensors.deep_sensors);
+    EXPECT_EQ(changes, 2);
+}
+
 TEST(SettingsBinding, ClampsOnEdit)
 {
     Config config = MakeConfig();

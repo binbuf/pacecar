@@ -131,6 +131,27 @@ TEST(SensorHelperClient, BackoffAndUnavailableTransitions)
     EXPECT_EQ(client.State(), HelperState::Disconnected);
 }
 
+TEST(SensorHelperClient, DisabledClientNeverConnectsAndReconnectsWhenEnabled)
+{
+    SensorHelperClient client(L"\\\\.\\pipe\\PacecarTest.DoesNotExist");
+    EXPECT_TRUE(client.Enabled());
+
+    client.SetEnabled(false);
+    EXPECT_FALSE(client.Enabled());
+    // Disabled: `Pump` is a no-op and does not even schedule a reconnect.
+    EXPECT_FALSE(client.Pump(0));
+    EXPECT_EQ(client.NextAttemptMs(), 0u);
+    EXPECT_FALSE(client.Pump(1000000));
+    EXPECT_EQ(client.State(), HelperState::Disconnected);
+
+    // Re-enabling arms an immediate attempt.
+    client.SetEnabled(true);
+    EXPECT_TRUE(client.Enabled());
+    EXPECT_EQ(client.NextAttemptMs(), 0u);
+    EXPECT_FALSE(client.Pump(0));
+    EXPECT_EQ(client.NextAttemptMs(), SensorHelperClient::kInitialBackoffMs);
+}
+
 TEST(SensorHelperClient, RoundTripsHandshakeAndSnapshot)
 {
     const std::wstring name = UniquePipeName();

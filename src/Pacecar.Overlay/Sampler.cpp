@@ -137,21 +137,15 @@ void Sampler::BuildProviders(const pacecar::Config& config)
         pacecar::metrics::MakeIcmpPingSource(), config.sensors.ping_target));
 
     // Registered last so a real package/board/fan/dimm reading overrides the best-effort ACPI
-    // baseline. Only created when the user enabled deep sensors; otherwise deep metrics stay
-    // unavailable and the UI reports "off".
-    if (config.sensors.deep_sensors)
-    {
-        const std::wstring sid = pacecar::app::CurrentUserSid();
-        helperClient_ = std::make_shared<pacecar::metrics::SensorHelperClient>(
-            pacecar::metrics::SensorHelperClient::DefaultPipeName(sid));
-        helperProvider_ = std::make_shared<pacecar::metrics::SensorHelperProvider>(helperClient_);
-        aggregator_->AddProvider(helperProvider_);
-    }
-    else
-    {
-        helperClient_.reset();
-        helperProvider_.reset();
-    }
+    // baseline. The provider is always registered so the Settings toggle can enable it at runtime;
+    // while disabled it reports the deep-sensor domain unavailable and touches nothing else.
+    const std::wstring sid = pacecar::app::CurrentUserSid();
+    helperClient_ = std::make_shared<pacecar::metrics::SensorHelperClient>(
+        pacecar::metrics::SensorHelperClient::DefaultPipeName(sid));
+    helperClient_->SetEnabled(config.sensors.deep_sensors);
+    helperProvider_ = std::make_shared<pacecar::metrics::SensorHelperProvider>(helperClient_);
+    aggregator_->AddProvider(helperProvider_);
+    deepSensorsEnabled_.store(config.sensors.deep_sensors);
 
     providerCount_ = aggregator_->ProviderCount();
 }
@@ -326,9 +320,24 @@ std::wstring Sampler::Diagnostics() const
     return text;
 }
 
+bool Sampler::SetDeepSensorsEnabled(bool enabled) noexcept
+{
+    const bool changed = deepSensorsEnabled_.exchange(enabled) != enabled;
+    if (helperClient_)
+    {
+        helperClient_->SetEnabled(enabled);
+    }
+    return changed;
+}
+
+bool Sampler::DeepSensorsEnabled() const noexcept
+{
+    return deepSensorsEnabled_.load(std::memory_order_relaxed);
+}
+
 std::wstring Sampler::HelperStatus() const
 {
-    if (!helperProvider_ || !helperClient_)
+    if (!deepSensorsEnabled_.load(std::memory_order_relaxed) || !helperProvider_ || !helperClient_)
     {
         return L"off (disabled in settings)";
     }

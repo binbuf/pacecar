@@ -149,6 +149,10 @@ class SettingsBinding
     // ---- Sensors ------------------------------------------------------------------------------
     [[nodiscard]] bool SensorEnabled(SensorToggle toggle) const noexcept;
     void SetSensorEnabled(SensorToggle toggle, bool enabled);
+    // The master deep-sensor switch. Enabling also prompts for elevation via the helper launcher
+    // (the window/app layer performs the launch; the binding only maps the config flag).
+    [[nodiscard]] bool DeepSensorsEnabled() const noexcept;
+    void SetDeepSensorsEnabled(bool enabled);
     [[nodiscard]] std::string_view Selection(DeviceKind kind) const noexcept;
     void SetSelection(DeviceKind kind, std::string value);
     [[nodiscard]] int DiskTempModeIndex() const noexcept;

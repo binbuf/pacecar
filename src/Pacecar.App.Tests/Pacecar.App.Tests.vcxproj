@@ -47,12 +47,12 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(RepoRoot)src\Pacecar.Overlay\Widgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(RepoRoot)src\Pacecar.Overlay;$(RepoRoot)src\Pacecar.Overlay\Widgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gtest_main.lib;advapi32.lib;d2d1.lib;dwrite.lib;windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gtest_main.lib;advapi32.lib;d2d1.lib;dwrite.lib;windowscodecs.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -60,7 +60,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(RepoRoot)src\Pacecar.Overlay\Widgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(RepoRoot)src\Pacecar.Overlay;$(RepoRoot)src\Pacecar.Overlay\Widgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!-- Google Test's registration templates trip MSVC /analyze false positives (C6326) that are
            attributed to the test call site. Static analysis stays on for the shipping binaries. -->
       <EnablePREfast>false</EnablePREfast>
@@ -70,7 +70,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>gtest_main.lib;advapi32.lib;d2d1.lib;dwrite.lib;windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gtest_main.lib;advapi32.lib;d2d1.lib;dwrite.lib;windowscodecs.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -85,6 +85,7 @@
     <ClCompile Include="format_test.cpp" />
     <ClCompile Include="gpu_provider_test.cpp" />
     <ClCompile Include="gpu_vendor_provider_test.cpp" />
+    <ClCompile Include="helper_launcher_test.cpp" />
     <ClCompile Include="ipc_protocol_test.cpp" />
     <ClCompile Include="layout_test.cpp" />
     <ClCompile Include="lifecycle_test.cpp" />
@@ -106,6 +107,7 @@
     <ClCompile Include="theme_test.cpp" />
     <ClCompile Include="widget_layout_test.cpp" />
     <ClCompile Include="widget_render_test.cpp" />
+    <ClCompile Include="..\Pacecar.Overlay\HelperLauncher.cpp" />
     <ClCompile Include="..\Pacecar.Overlay\Widgets\Gauge.cpp" />
     <ClCompile Include="..\Pacecar.Overlay\Widgets\Header.cpp" />
     <ClCompile Include="..\Pacecar.Overlay\Widgets\Panel.cpp" />

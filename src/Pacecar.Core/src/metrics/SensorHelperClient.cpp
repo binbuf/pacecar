@@ -59,6 +59,11 @@ bool SensorHelperClient::Pump(std::uint64_t nowMs)
 {
     std::lock_guard<std::mutex> lock(mutex_);
 
+    if (!enabled_)
+    {
+        return false;
+    }
+
     if (pipe_ == nullptr)
     {
         if (nowMs < nextAttemptMs_)
@@ -89,6 +94,26 @@ void SensorHelperClient::Disconnect() noexcept
     haveData_ = false;
     nextAttemptMs_ = 0;
     backoffMs_ = kInitialBackoffMs;
+}
+
+void SensorHelperClient::SetEnabled(bool enabled) noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (enabled_ == enabled)
+    {
+        return;
+    }
+    enabled_ = enabled;
+    ClosePipeInternal();
+    haveData_ = false;
+    backoffMs_ = kInitialBackoffMs;
+    nextAttemptMs_ = 0; // Re-enabling connects on the next pump.
+}
+
+bool SensorHelperClient::Enabled() const noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return enabled_;
 }
 
 HelperState SensorHelperClient::State() const noexcept

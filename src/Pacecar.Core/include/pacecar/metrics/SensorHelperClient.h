@@ -54,6 +54,13 @@ class SensorHelperClient
     // is connected afterwards.
     bool Pump(std::uint64_t nowMs);
 
+    // Enables/disables the helper path without recreating the client. While disabled, `Pump` never
+    // connects and any live connection is torn down, so the deep-sensor domain stays unavailable.
+    // Re-enabling schedules an immediate connect attempt. Defaults to enabled so a client created
+    // directly keeps its pre-existing behavior.
+    void SetEnabled(bool enabled) noexcept;
+    [[nodiscard]] bool Enabled() const noexcept;
+
     // Tears the connection down (used at shutdown).
     void Disconnect() noexcept;
 
@@ -97,6 +104,7 @@ class SensorHelperClient
 
     std::wstring pipeName_;
     void* pipe_ = nullptr;
+    bool enabled_ = true;
     HelperState state_ = HelperState::Disconnected;
     std::uint64_t nextAttemptMs_ = 0;
     std::uint64_t backoffMs_ = kInitialBackoffMs;
