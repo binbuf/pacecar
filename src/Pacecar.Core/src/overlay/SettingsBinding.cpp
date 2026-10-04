@@ -598,6 +598,23 @@ bool SettingsBinding::SetToggleBackgroundHotkey(std::string_view text)
     return true;
 }
 
+std::string_view SettingsBinding::ToggleFpsCaptureHotkey() const noexcept
+{
+    return config_.hotkeys.toggle_fps_capture;
+}
+
+bool SettingsBinding::SetToggleFpsCaptureHotkey(std::string_view text)
+{
+    std::string canonical;
+    if (!CanonicalizeHotkey(text, canonical))
+    {
+        return false;
+    }
+    config_.hotkeys.toggle_fps_capture = std::move(canonical);
+    Changed();
+    return true;
+}
+
 // ---- Bulk ------------------------------------------------------------------------------------
 
 void SettingsBinding::ResetToDefaults()

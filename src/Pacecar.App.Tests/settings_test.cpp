@@ -242,6 +242,12 @@ TEST(SettingsBinding, MapsViewBackgroundAndExtraHotkeys)
     EXPECT_EQ(config.hotkeys.cycle_view, "Ctrl+Alt+V");
     ASSERT_TRUE(binding.SetToggleBackgroundHotkey(""));
     EXPECT_TRUE(config.hotkeys.toggle_background.empty());
+
+    EXPECT_EQ(binding.ToggleFpsCaptureHotkey(), "Alt+F11");
+    ASSERT_TRUE(binding.SetToggleFpsCaptureHotkey("ctrl+alt+f"));
+    EXPECT_EQ(config.hotkeys.toggle_fps_capture, "Ctrl+Alt+F");
+    ASSERT_TRUE(binding.SetToggleFpsCaptureHotkey(""));
+    EXPECT_TRUE(config.hotkeys.toggle_fps_capture.empty());
 }
 
 TEST(SettingsBinding, ClampsStatTextSize)

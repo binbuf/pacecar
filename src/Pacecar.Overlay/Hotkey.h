@@ -26,6 +26,7 @@ class HotkeyManager
     static constexpr int kToggleClickThroughId = 2;
     static constexpr int kCycleViewId = 3;
     static constexpr int kToggleBackgroundId = 4;
+    static constexpr int kToggleFpsCaptureId = 5;
 
     using Callback = std::function<void(int hotkeyId)>;
 

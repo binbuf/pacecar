@@ -492,19 +492,13 @@ void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
     }
 
     const bool haveFrame = frame_ && frame_->snapshot;
-    // The FPS tile is drawn only while a capture is actually producing frames, and disappears
-    // again as soon as the capture stops (T17). Config cannot leave it visible otherwise. The
-    // FPS-only view always shows the readout (with a placeholder when no capture is running).
+    // Used only for the header status label; FPS visibility is decided by the layout (the capture
+    // opt-in and the active view), not by whether frames are currently flowing.
     const bool captureActive = haveFrame && !Unavailable(frame_->snapshot->frame.status) &&
                                frame_->snapshot->frame.fps > 0.0;
-    if (settings_.view != pacecar::ViewMode::FpsOnly)
-    {
-        // Hide the FPS row/tile when no game is being captured or its value is not positive, so it
-        // never shows a stale or "--" readout. The FPS-only view always shows it.
-        SetFrameCaptureTileVisible(settings_, captureActive);
-    }
 
-    if (settings_.view == pacecar::ViewMode::StatRows)
+    if (settings_.view == pacecar::ViewMode::StatRows ||
+        settings_.view == pacecar::ViewMode::FpsText)
     {
         DrawStatRows(target, theme, !paintBackground);
         return;

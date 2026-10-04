@@ -19,7 +19,10 @@ internal sealed class EtwFrameTime : IDisposable
 {
     // PresentMon's provider GUIDs. The DXGI and D3D9 present events are the portable present source;
     // DxgKrnl/DWM are enabled so a future slice can correlate GPU work and composed presents.
-    private static readonly Guid DxgiProvider = new("ca11c036-0102-4a2d-a6ad-50a63baf81bc");
+    // The DXGI GUID is the registered Microsoft-Windows-DXGI provider (confirmed via
+    // `logman query providers` / `wevtutil gp Microsoft-Windows-DXGI`); a wrong GUID silently
+    // enables nothing and no present events ever arrive (the FPS readout stays "--").
+    private static readonly Guid DxgiProvider = new("ca11c036-0102-4a2d-a6ad-f03cfed5d3c9");
     private static readonly Guid D3d9Provider = new("783aca0a-790e-4d7f-8451-aa850511c6b9");
     private static readonly Guid DxgKrnlProvider = new("802ec45a-1e99-4b83-9920-87c98277ba9d");
     private static readonly Guid DwmProvider = new("9e9bba3c-2e38-40cb-99f4-9e8281425164");

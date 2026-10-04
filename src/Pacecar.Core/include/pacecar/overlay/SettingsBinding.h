@@ -32,9 +32,9 @@ inline constexpr std::array<Theme, 3> kThemeOptions{Theme::Dark, Theme::Light, T
 inline constexpr std::array<LayoutPreset, 4> kLayoutOptions{
     LayoutPreset::Compact3x3, LayoutPreset::Vertical1x6, LayoutPreset::AutoFit,
     LayoutPreset::Custom};
-inline constexpr std::array<ViewMode, 5> kViewOptions{
-    ViewMode::Full, ViewMode::LargeVisuals, ViewMode::SmallText, ViewMode::StatRows,
-    ViewMode::FpsOnly};
+inline constexpr std::array<ViewMode, 6> kViewOptions{
+    ViewMode::Full,      ViewMode::LargeVisuals, ViewMode::SmallText,
+    ViewMode::StatRows,  ViewMode::FpsText,      ViewMode::FpsOnly};
 inline constexpr std::array<OverlayMode, 2> kOverlayModeOptions{OverlayMode::Interactive,
                                                                 OverlayMode::ClickThrough};
 inline constexpr std::array<Visualization, 2> kVisualizationOptions{Visualization::Gauges,
@@ -198,6 +198,8 @@ class SettingsBinding
     [[nodiscard]] bool SetCycleViewHotkey(std::string_view text);
     [[nodiscard]] std::string_view ToggleBackgroundHotkey() const noexcept;
     [[nodiscard]] bool SetToggleBackgroundHotkey(std::string_view text);
+    [[nodiscard]] std::string_view ToggleFpsCaptureHotkey() const noexcept;
+    [[nodiscard]] bool SetToggleFpsCaptureHotkey(std::string_view text);
 
     // ---- Bulk ---------------------------------------------------------------------------------
     // Restores the built-in defaults and reports the change exactly once.

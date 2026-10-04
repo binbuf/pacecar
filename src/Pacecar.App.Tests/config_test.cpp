@@ -210,7 +210,8 @@ const char* kDefaultConfigJson = R"JSON({
     "toggle_overlay": "Ctrl+Shift+P",
     "toggle_click_through": "",
     "cycle_view": "Alt+F12",
-    "toggle_background": "Ctrl+Shift+B"
+    "toggle_background": "Ctrl+Shift+B",
+    "toggle_fps_capture": "Alt+F11"
   }
 })JSON";
 

@@ -42,13 +42,15 @@ enum class OverlayCommand : std::uint16_t
     ViewLargeVisuals = 15,
     ViewSmallText = 16,
     ViewStatRows = 17,
-    ViewFpsOnly = 18,
+    ViewFpsText = 18,
+    ViewFpsOnly = 19,
 };
 
 // The View submenu's items, in display order.
-inline constexpr std::array<OverlayCommand, 5> kViewMenuCommands{
-    OverlayCommand::ViewFull, OverlayCommand::ViewLargeVisuals, OverlayCommand::ViewSmallText,
-    OverlayCommand::ViewStatRows, OverlayCommand::ViewFpsOnly};
+inline constexpr std::array<OverlayCommand, 6> kViewMenuCommands{
+    OverlayCommand::ViewFull,      OverlayCommand::ViewLargeVisuals,
+    OverlayCommand::ViewSmallText, OverlayCommand::ViewStatRows,
+    OverlayCommand::ViewFpsText,   OverlayCommand::ViewFpsOnly};
 
 // Maps a View* menu command to the presentation view it selects, or nullopt for other commands.
 [[nodiscard]] inline std::optional<pacecar::ViewMode> ViewModeForCommand(
@@ -64,6 +66,8 @@ inline constexpr std::array<OverlayCommand, 5> kViewMenuCommands{
         return pacecar::ViewMode::SmallText;
     case OverlayCommand::ViewStatRows:
         return pacecar::ViewMode::StatRows;
+    case OverlayCommand::ViewFpsText:
+        return pacecar::ViewMode::FpsText;
     case OverlayCommand::ViewFpsOnly:
         return pacecar::ViewMode::FpsOnly;
     default:
@@ -84,6 +88,8 @@ inline constexpr std::array<OverlayCommand, 5> kViewMenuCommands{
         return OverlayCommand::ViewSmallText;
     case pacecar::ViewMode::StatRows:
         return OverlayCommand::ViewStatRows;
+    case pacecar::ViewMode::FpsText:
+        return OverlayCommand::ViewFpsText;
     case pacecar::ViewMode::FpsOnly:
         return OverlayCommand::ViewFpsOnly;
     }
@@ -158,6 +164,8 @@ inline constexpr std::array<OverlayCommand, 10> kTrayMenuCommands{
         return L"Small text";
     case OverlayCommand::ViewStatRows:
         return L"Stat rows";
+    case OverlayCommand::ViewFpsText:
+        return L"FPS text";
     case OverlayCommand::ViewFpsOnly:
         return L"FPS only";
     case OverlayCommand::None:

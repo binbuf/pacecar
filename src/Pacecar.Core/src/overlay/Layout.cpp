@@ -337,6 +337,30 @@ void ApplyViewMode(LayoutSettings& settings, pacecar::ViewMode view) noexcept
         }
         break;
     }
+    case pacecar::ViewMode::FpsText: {
+        // A StatRows-style plain text list restricted to the FPS / frame-time readout. Ignore the
+        // per-tile visibility config: only FPS is listed (the scene shows it once frames flow).
+        settings.drawBackground = false;
+        settings.preset = pacecar::LayoutPreset::AutoFit;
+        settings.tileMetrics.labelHeight = 9.0f;
+        settings.tileMetrics.primaryHeight = 14.0f;
+        settings.tileMetrics.lineHeight = 10.0f;
+        settings.tileMetrics.minWidth = 60.0f;
+        settings.tileMetrics.padding = 3.0f;
+        settings.tileGap = 2.0f;
+        for (TileSettings& tile : settings.tiles)
+        {
+            tile.visible = false;
+            tile.fields.label = true;
+            tile.fields.primary = true;
+            tile.fields.secondary = false;
+            tile.fields.tertiary = false;
+            tile.fields.visualization = false;
+            tile.fields.miniSparkline = false;
+        }
+        settings.tiles[static_cast<std::size_t>(TileId::Fps)].visible = true;
+        break;
+    }
     case pacecar::ViewMode::FpsOnly: {
         // Just the frame-time readout. Ignore the per-tile config: only FPS is shown.
         settings.preset = pacecar::LayoutPreset::Compact3x3;
@@ -396,6 +420,11 @@ LayoutSettings LayoutSettingsFromConfig(const pacecar::Config& config) noexcept
         target.fields.miniSparkline = tile.mini_sparklines;
         target.visualization = tile.visualization;
     }
+
+    // The FPS tile has no per-tile toggle in Settings. It is shown whenever FPS capture is enabled
+    // (the explicit opt-in via the hotkey, menus, or an FPS view), even before frames start flowing,
+    // so the readout confirms the opt-in instead of silently hiding.
+    settings.tiles[static_cast<std::size_t>(TileId::Fps)].visible = config.sensors.fps_capture;
 
     for (const pacecar::CustomTilePlacement& placement : config.layout.custom_tiles)
     {

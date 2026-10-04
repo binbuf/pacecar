@@ -614,10 +614,24 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
             return text;
         };
 
+        // Tracks the view last pushed to the overlay so entering an FPS view (which is an explicit
+        // opt-in) arms capture exactly once, without re-arming on unrelated settings edits or
+        // fighting the Alt+F11 toggle while already in that view.
+        pacecar::ViewMode appliedView = config.general.view;
+
         // Live-apply every Settings edit: overlay appearance/behavior, sampler cadence, hotkey
         // re-registration, tray flags, and the debounced config write. No per-keystroke/per-drag
         // write happens here - `saver.Touch()` only arms the 500 ms debounce.
         const auto applyConfigChanges = [&] {
+            const bool enteringFpsView =
+                (config.general.view == pacecar::ViewMode::FpsText ||
+                 config.general.view == pacecar::ViewMode::FpsOnly) &&
+                config.general.view != appliedView;
+            if (enteringFpsView)
+            {
+                config.sensors.fps_capture = true;
+            }
+            appliedView = config.general.view;
             overlay.ApplyConfig(config);
             const auto refreshMs =
                 std::chrono::milliseconds(static_cast<int>(config.general.refresh));
@@ -669,6 +683,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                         static_cast<void>(
                             hotkeys.Register(pacecar::overlay::HotkeyManager::kToggleBackgroundId,
                                              backgroundParse.binding));
+                    }
+                }
+                hotkeys.Unregister(pacecar::overlay::HotkeyManager::kToggleFpsCaptureId);
+                const std::wstring fpsCaptureHotkey =
+                    Utf8ToWide(config.hotkeys.toggle_fps_capture);
+                if (!fpsCaptureHotkey.empty())
+                {
+                    const pacecar::app::HotkeyParseResult fpsCaptureParse =
+                        pacecar::app::ParseHotkey(fpsCaptureHotkey);
+                    if (fpsCaptureParse.ok())
+                    {
+                        static_cast<void>(
+                            hotkeys.Register(pacecar::overlay::HotkeyManager::kToggleFpsCaptureId,
+                                             fpsCaptureParse.binding));
                     }
                 }
             }
@@ -727,10 +755,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                             L"About Pacecar", MB_OK | MB_ICONINFORMATION);
                 break;
             case pacecar::overlay::OverlayCommand::ToggleFrameCapture: {
-                const bool enable = !sampler.FrameCaptureEnabled();
-                config.sensors.fps_capture = enable;
-                applyFrameCapture(enable);
-                saver.Touch();
+                config.sensors.fps_capture = !sampler.FrameCaptureEnabled();
+                applyConfigChanges();
                 break;
             }
             case pacecar::overlay::OverlayCommand::CycleView:
@@ -741,6 +767,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
             case pacecar::overlay::OverlayCommand::ViewLargeVisuals:
             case pacecar::overlay::OverlayCommand::ViewSmallText:
             case pacecar::overlay::OverlayCommand::ViewStatRows:
+            case pacecar::overlay::OverlayCommand::ViewFpsText:
             case pacecar::overlay::OverlayCommand::ViewFpsOnly:
                 if (const auto view = pacecar::overlay::ViewModeForCommand(command))
                 {
@@ -811,6 +838,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                 {
                     handleCommand(pacecar::overlay::OverlayCommand::ToggleBackground);
                 }
+                else if (hotkeyId == pacecar::overlay::HotkeyManager::kToggleFpsCaptureId)
+                {
+                    handleCommand(pacecar::overlay::OverlayCommand::ToggleFrameCapture);
+                }
                 refreshShellFlags();
             });
 
@@ -877,6 +908,24 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                 {
                     pacecar::LogWarn(L"hotkey: invalid background hotkey in config: " +
                                      backgroundHotkey);
+                }
+            }
+
+            const std::wstring fpsCaptureHotkey = Utf8ToWide(config.hotkeys.toggle_fps_capture);
+            if (!fpsCaptureHotkey.empty())
+            {
+                const pacecar::app::HotkeyParseResult fpsCaptureParse =
+                    pacecar::app::ParseHotkey(fpsCaptureHotkey);
+                if (fpsCaptureParse.ok())
+                {
+                    static_cast<void>(
+                        hotkeys.Register(pacecar::overlay::HotkeyManager::kToggleFpsCaptureId,
+                                         fpsCaptureParse.binding));
+                }
+                else
+                {
+                    pacecar::LogWarn(L"hotkey: invalid FPS-capture hotkey in config: " +
+                                     fpsCaptureHotkey);
                 }
             }
         }

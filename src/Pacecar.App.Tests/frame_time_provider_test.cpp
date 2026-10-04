@@ -244,13 +244,8 @@ TEST(FrameTimeProvider, ClientSendsStartAndStopCaptureCommands)
     EXPECT_EQ(stop.command, static_cast<std::uint32_t>(FrameCaptureCommand::Stop));
 }
 
-TEST(FrameTimeProvider, FpsTileAppearsOnlyWhileCapturing)
+TEST(FrameTimeProvider, FpsTileFollowsCaptureOptIn)
 {
-    pacecar::Config config;
-    // Default config keeps the FPS tile hidden.
-    pacecar::overlay::LayoutSettings settings = pacecar::overlay::LayoutSettingsFromConfig(config);
-    EXPECT_FALSE(settings.tiles[static_cast<std::size_t>(pacecar::overlay::TileId::Fps)].visible);
-
     const auto hasFps = [](const pacecar::overlay::LayoutSettings& s)
     {
         const pacecar::overlay::LayoutResult layout =
@@ -265,10 +260,18 @@ TEST(FrameTimeProvider, FpsTileAppearsOnlyWhileCapturing)
         return false;
     };
 
-    EXPECT_FALSE(hasFps(settings));
-    pacecar::overlay::SetFrameCaptureTileVisible(settings, true);
-    EXPECT_TRUE(hasFps(settings));
-    pacecar::overlay::SetFrameCaptureTileVisible(settings, false);
-    EXPECT_FALSE(hasFps(settings));
+    // Default config leaves FPS capture off, so the FPS tile stays hidden.
+    pacecar::Config config;
+    EXPECT_FALSE(
+        pacecar::overlay::LayoutSettingsFromConfig(config)
+            .tiles[static_cast<std::size_t>(pacecar::overlay::TileId::Fps)]
+            .visible);
+
+    // Enabling capture (the explicit opt-in) shows the tile even before frames flow.
+    config.sensors.fps_capture = true;
+    EXPECT_TRUE(hasFps(pacecar::overlay::LayoutSettingsFromConfig(config)));
+
+    config.sensors.fps_capture = false;
+    EXPECT_FALSE(hasFps(pacecar::overlay::LayoutSettingsFromConfig(config)));
 }
 } // namespace

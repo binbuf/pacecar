@@ -341,6 +341,23 @@ TEST(Layout, StatRowsViewIsTextOnlyAndCarriesConfiguredTextSize)
     }
 }
 
+TEST(Layout, FpsTextViewIsPlainTextFpsOnly)
+{
+    pacecar::Config config = pacecar::Config::Defaults();
+    config.general.view = ViewMode::FpsText;
+    const LayoutSettings settings = LayoutSettingsFromConfig(config);
+
+    EXPECT_FALSE(settings.drawHeader);
+    // The FPS-text view is the backgroundless StatRows list restricted to the FPS readout.
+    EXPECT_FALSE(settings.drawBackground);
+    for (std::size_t i = 0; i < kMaxTiles; ++i)
+    {
+        const bool isFps = i == static_cast<std::size_t>(TileId::Fps);
+        EXPECT_EQ(settings.tiles[i].visible, isFps) << "tile " << i;
+        EXPECT_FALSE(settings.tiles[i].fields.visualization) << "tile " << i;
+    }
+}
+
 TEST(Layout, LargeVisualsViewForcesVisualizationAndKeepsHeader)
 {
     pacecar::Config config = pacecar::Config::Defaults();
@@ -403,7 +420,7 @@ TEST(OverlayCommands, MenuExposesAllRequiredCommandsInOrder)
 
 TEST(OverlayCommands, ViewSubmenuMapsEachItemToItsView)
 {
-    EXPECT_EQ(pacecar::overlay::kViewMenuCommands.size(), 5u);
+    EXPECT_EQ(pacecar::overlay::kViewMenuCommands.size(), 6u);
     for (const OverlayCommand command : pacecar::overlay::kViewMenuCommands)
     {
         const auto view = pacecar::overlay::ViewModeForCommand(command);

@@ -63,16 +63,19 @@ enum class LayoutPreset
 //   SmallText    - a compact text-only readout (label + value per metric, no visuals).
 //   StatRows     - the simplest readout: one plain text line per visible stat, stacked top to
 //                  bottom, with no tile chrome or visuals. The value font size is user-adjustable.
+//   FpsText      - a StatRows-style plain text list restricted to the FPS / frame-time readout.
+//                  Selecting it arms FPS capture so the readout appears as soon as frames flow.
 //   FpsOnly      - just the FPS / frame-time text readout.
 //
-// The text views (`SmallText`, `StatRows`, `FpsOnly`) look best with the panel background turned
-// off, so the overlay reads as plain text over the desktop/game.
+// The text views (`SmallText`, `StatRows`, `FpsText`, `FpsOnly`) look best with the panel background
+// turned off, so the overlay reads as plain text over the desktop/game.
 enum class ViewMode
 {
     Full = 0,
     LargeVisuals,
     SmallText,
     StatRows,
+    FpsText,
     FpsOnly,
 };
 
@@ -244,6 +247,9 @@ struct HotkeysConfig
     std::string cycle_view = "Alt+F12";
     // Toggles the panel background on/off. Empty disables the binding.
     std::string toggle_background = "Ctrl+Shift+B";
+    // Arms/disarms FPS + frame-time capture (launches the elevated helper on first use). Empty
+    // disables the binding.
+    std::string toggle_fps_capture = "Alt+F11";
 };
 
 struct Config

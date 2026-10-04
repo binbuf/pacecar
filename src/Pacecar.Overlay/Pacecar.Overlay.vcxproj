@@ -136,6 +136,28 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\..\build\Directory.Build.targets" />
+  <!-- Deploy the optional elevated sensor/ETW helper beside the UI executable. `HelperLauncher`
+       looks for `Pacecar.Sensors.exe` next to `Pacecar.Overlay.exe`, so without this the opt-in FPS
+       capture and deep sensors can never start (they report the helper as missing). The helper is
+       deliberately built outside the native solution; publish it (incremental) every build so helper
+       edits - e.g. the ETW provider bind - actually ship instead of silently running a stale exe,
+       then copy the changed files. Non-fatal: a machine without the .NET SDK still builds the
+       native app. -->
+  <PropertyGroup>
+    <PacecarSensorHelperProject>$(RepoRoot)helper\Pacecar.Sensors\Pacecar.Sensors.csproj</PacecarSensorHelperProject>
+    <PacecarSensorHelperPublishDir>$(RepoRoot)helper\Pacecar.Sensors\bin\Release\net8.0-windows\win-x64\publish\</PacecarSensorHelperPublishDir>
+  </PropertyGroup>
+  <Target Name="DeploySensorHelper" AfterTargets="Build" Condition="Exists('$(PacecarSensorHelperProject)')">
+    <Exec Command="dotnet publish &quot;$(PacecarSensorHelperProject)&quot; -c Release -v quiet --nologo"
+          ContinueOnError="true" />
+    <ItemGroup Condition="Exists('$(PacecarSensorHelperPublishDir)Pacecar.Sensors.exe')">
+      <PacecarSensorHelperFiles Include="$(PacecarSensorHelperPublishDir)**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PacecarSensorHelperFiles)"
+          DestinationFolder="$(OutDir)%(RecursiveDir)"
+          SkipUnchangedFiles="true"
+          Condition="'@(PacecarSensorHelperFiles)' != ''" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

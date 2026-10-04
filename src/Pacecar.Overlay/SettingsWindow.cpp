@@ -63,6 +63,7 @@ constexpr int kIdOverlayHotkey = 1410;
 constexpr int kIdClickThroughHotkey = 1411;
 constexpr int kIdCycleViewHotkey = 1412;
 constexpr int kIdBackgroundHotkey = 1413;
+constexpr int kIdFpsCaptureHotkey = 1414;
 
 constexpr int kIdAboutText = 1420;
 constexpr int kIdCopyInfo = 1421;
@@ -443,8 +444,8 @@ void SettingsWindow::BuildGeneralPage()
         150, 173, 180, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdViewCombo)),
         instance_, nullptr);
     AddControl(page, view);
-    const std::array<const wchar_t*, 5> viewNames{L"Full panel", L"Large visuals", L"Small text",
-                                                  L"Stat rows", L"FPS only"};
+    const std::array<const wchar_t*, 6> viewNames{L"Full panel", L"Large visuals", L"Small text",
+                                                  L"Stat rows",  L"FPS text",     L"FPS only"};
     for (const wchar_t* name : viewNames)
     {
         SendMessageW(view, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
@@ -691,9 +692,10 @@ void SettingsWindow::BuildHotkeysPage()
     AddControl(page, MakeLabel(hwnd_, instance_, L"Toggle click-through:", 16, 96, 160));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Cycle view:", 16, 136, 160));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Toggle background:", 16, 176, 160));
+    AddControl(page, MakeLabel(hwnd_, instance_, L"FPS capture:", 16, 216, 160));
     AddControl(page, MakeLabel(hwnd_, instance_,
                                L"Click the box, then press a key combination. Delete clears it.",
-                               16, 212, 440, 20));
+                               16, 252, 440, 20));
 
     HWND overlayKey = CreateWindowExW(
         0, kHotkeyClassName, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP, 190, 52, 160, 24, hwnd_,
@@ -711,6 +713,10 @@ void SettingsWindow::BuildHotkeysPage()
         0, kHotkeyClassName, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP, 190, 172, 160, 24, hwnd_,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBackgroundHotkey)), instance_, nullptr);
     AddControl(page, backgroundKey);
+    HWND fpsCaptureKey = CreateWindowExW(
+        0, kHotkeyClassName, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP, 190, 212, 160, 24, hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdFpsCaptureHotkey)), instance_, nullptr);
+    AddControl(page, fpsCaptureKey);
 }
 
 void SettingsWindow::BuildAboutPage()
@@ -859,6 +865,11 @@ void SettingsWindow::RefreshFromConfig()
         SetWindowTextW(backgroundKey,
                        FormatHotkeyForDisplay(binding_->ToggleBackgroundHotkey()).c_str());
     }
+    if (HWND fpsCaptureKey = GetDlgItem(hwnd_, kIdFpsCaptureHotkey))
+    {
+        SetWindowTextW(fpsCaptureKey,
+                       FormatHotkeyForDisplay(binding_->ToggleFpsCaptureHotkey()).c_str());
+    }
 
     if (HWND about = GetDlgItem(hwnd_, kIdAboutText))
     {
@@ -881,10 +892,12 @@ void SettingsWindow::UpdateViewDependentControls()
         return;
     }
     const std::size_t index = static_cast<std::size_t>(binding_->ViewIndex());
-    const bool statRows = index < kViewOptions.size() &&
-                          kViewOptions[index] == pacecar::ViewMode::StatRows;
-    // The value font size only affects the StatRows view; grey it out elsewhere so it never looks
-    // like a no-op.
+    const bool statRows =
+        index < kViewOptions.size() &&
+        (kViewOptions[index] == pacecar::ViewMode::StatRows ||
+         kViewOptions[index] == pacecar::ViewMode::FpsText);
+    // The value font size only affects the StatRows / FPS-text views; grey it out elsewhere so it
+    // never looks like a no-op.
     if (HWND textSize = GetDlgItem(hwnd_, kIdStatTextSize))
     {
         EnableWindow(textSize, statRows);
@@ -955,6 +968,14 @@ void SettingsWindow::OnHotkeyCaptured(int controlId)
         {
             SetWindowTextW(control,
                            FormatHotkeyForDisplay(binding_->ToggleBackgroundHotkey()).c_str());
+        }
+    }
+    else if (controlId == kIdFpsCaptureHotkey)
+    {
+        if (!binding_->SetToggleFpsCaptureHotkey(captured))
+        {
+            SetWindowTextW(control,
+                           FormatHotkeyForDisplay(binding_->ToggleFpsCaptureHotkey()).c_str());
         }
     }
 }

@@ -187,8 +187,9 @@ constexpr auto kThemeNames =
     std::array<std::pair<const char*, int>, 3>{{{"dark", 0}, {"light", 1}, {"high_contrast", 2}}};
 constexpr auto kLayoutNames = std::array<std::pair<const char*, int>, 4>{
     {{"compact_3x3", 0}, {"vertical_1x6", 1}, {"auto_fit", 2}, {"custom", 3}}};
-constexpr auto kViewNames = std::array<std::pair<const char*, int>, 5>{
-    {{"full", 0}, {"large_visuals", 1}, {"small_text", 2}, {"stat_rows", 3}, {"fps_only", 4}}};
+constexpr auto kViewNames = std::array<std::pair<const char*, int>, 6>{
+    {{"full", 0},   {"large_visuals", 1}, {"small_text", 2},
+     {"stat_rows", 3}, {"fps_text", 4},   {"fps_only", 5}}};
 constexpr auto kOverlayModeNames =
     std::array<std::pair<const char*, int>, 2>{{{"interactive", 0}, {"click_through", 1}}};
 constexpr auto kVisualizationNames =
@@ -238,6 +239,8 @@ const char* ViewToString(ViewMode view)
         return "small_text";
     case ViewMode::StatRows:
         return "stat_rows";
+    case ViewMode::FpsText:
+        return "fps_text";
     case ViewMode::FpsOnly:
         return "fps_only";
     case ViewMode::Full:
@@ -520,7 +523,8 @@ void to_json(Json& j, const HotkeysConfig& hotkeys)
     j = Json{{"toggle_overlay", hotkeys.toggle_overlay},
              {"toggle_click_through", hotkeys.toggle_click_through},
              {"cycle_view", hotkeys.cycle_view},
-             {"toggle_background", hotkeys.toggle_background}};
+             {"toggle_background", hotkeys.toggle_background},
+             {"toggle_fps_capture", hotkeys.toggle_fps_capture}};
 }
 
 void from_json(const Json& j, HotkeysConfig& hotkeys)
@@ -531,6 +535,8 @@ void from_json(const Json& j, HotkeysConfig& hotkeys)
         GetString(j, "toggle_click_through", defaults.toggle_click_through);
     hotkeys.cycle_view = GetString(j, "cycle_view", defaults.cycle_view);
     hotkeys.toggle_background = GetString(j, "toggle_background", defaults.toggle_background);
+    hotkeys.toggle_fps_capture =
+        GetString(j, "toggle_fps_capture", defaults.toggle_fps_capture);
 }
 
 void to_json(Json& j, const Config& config)
