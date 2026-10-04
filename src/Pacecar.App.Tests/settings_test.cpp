@@ -166,7 +166,7 @@ TEST(SettingsBinding, ClampsOnEdit)
     Config config = MakeConfig();
     SettingsBinding binding(config, [] {});
 
-binding.SetOpacity(5.0);
+    binding.SetOpacity(5.0);
     EXPECT_DOUBLE_EQ(config.general.opacity, 1.0);
     binding.SetOpacity(-2.0);
     EXPECT_DOUBLE_EQ(config.general.opacity, 0.1);
@@ -220,6 +220,28 @@ TEST(SettingsBinding, CanonicalizesHotkeys)
     // An empty click-through hotkey is valid and clears the binding.
     ASSERT_TRUE(binding.SetToggleClickThroughHotkey(""));
     EXPECT_TRUE(config.hotkeys.toggle_click_through.empty());
+}
+
+TEST(SettingsBinding, MapsViewBackgroundAndExtraHotkeys)
+{
+    Config config = MakeConfig();
+    SettingsBinding binding(config, [] {});
+
+    binding.SetViewIndex(2);
+    EXPECT_EQ(config.general.view, pacecar::overlay::kViewOptions[2]);
+
+    binding.SetTransparentBackground(true);
+    EXPECT_TRUE(config.general.transparent_background);
+    EXPECT_TRUE(binding.TransparentBackground());
+
+    // The view cycle wraps through the option table.
+    EXPECT_EQ(pacecar::overlay::NextViewMode(pacecar::overlay::kViewOptions.back()),
+              pacecar::overlay::kViewOptions.front());
+
+    ASSERT_TRUE(binding.SetCycleViewHotkey("ctrl+alt+v"));
+    EXPECT_EQ(config.hotkeys.cycle_view, "Ctrl+Alt+V");
+    ASSERT_TRUE(binding.SetToggleBackgroundHotkey(""));
+    EXPECT_TRUE(config.hotkeys.toggle_background.empty());
 }
 
 TEST(SettingsBinding, RapidEditsProduceASingleDebouncedSave)

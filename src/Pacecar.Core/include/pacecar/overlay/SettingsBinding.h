@@ -27,7 +27,10 @@ inline constexpr std::array<int, 5> kRefreshOptions{250, 500, 1000, 2000, 5000};
 inline constexpr std::array<int, 7> kRetentionOptions{1, 5, 10, 15, 30, 60, 120};
 inline constexpr std::array<Theme, 3> kThemeOptions{Theme::Dark, Theme::Light, Theme::HighContrast};
 inline constexpr std::array<LayoutPreset, 4> kLayoutOptions{
-    LayoutPreset::Compact3x3, LayoutPreset::Vertical1x6, LayoutPreset::AutoFit, LayoutPreset::Custom};
+    LayoutPreset::Compact3x3, LayoutPreset::Vertical1x6, LayoutPreset::AutoFit,
+    LayoutPreset::Custom};
+inline constexpr std::array<ViewMode, 4> kViewOptions{ViewMode::Full, ViewMode::LargeVisuals,
+                                                      ViewMode::SmallText, ViewMode::FpsOnly};
 inline constexpr std::array<OverlayMode, 2> kOverlayModeOptions{OverlayMode::Interactive,
                                                                 OverlayMode::ClickThrough};
 inline constexpr std::array<Visualization, 2> kVisualizationOptions{Visualization::Gauges,
@@ -35,9 +38,9 @@ inline constexpr std::array<Visualization, 2> kVisualizationOptions{Visualizatio
 inline constexpr std::array<DiskTempMode, 3> kDiskTempOptions{
     DiskTempMode::SelectedDisk, DiskTempMode::Highest, DiskTempMode::Average};
 inline constexpr std::array<FanSpeedMode, 2> kFanModeOptions{FanSpeedMode::Highest,
-                                                            FanSpeedMode::Average};
+                                                             FanSpeedMode::Average};
 inline constexpr std::array<MainboardTempMode, 2> kMainboardModeOptions{MainboardTempMode::Highest,
-                                                                      MainboardTempMode::Average};
+                                                                        MainboardTempMode::Average};
 
 // Number of tiles the UI binds (matches `TilesConfig`).
 inline constexpr std::size_t kSettingsTileCount = 6;
@@ -85,6 +88,13 @@ template <typename T, std::size_t N>
     return 0;
 }
 
+// The next view in the cycle (wraps around). Used by the "View" menu/hotkey action.
+[[nodiscard]] inline ViewMode NextViewMode(ViewMode view) noexcept
+{
+    const std::size_t index = OptionIndex(kViewOptions, view);
+    return kViewOptions[(index + 1) % kViewOptions.size()];
+}
+
 // Clamps a combo index into `[0, count)`.
 [[nodiscard]] inline std::size_t ClampOptionIndex(int index, std::size_t count) noexcept
 {
@@ -125,6 +135,10 @@ class SettingsBinding
     void SetThemeIndex(int index) noexcept;
     [[nodiscard]] int LayoutIndex() const noexcept;
     void SetLayoutIndex(int index) noexcept;
+    [[nodiscard]] int ViewIndex() const noexcept;
+    void SetViewIndex(int index) noexcept;
+    [[nodiscard]] bool TransparentBackground() const noexcept;
+    void SetTransparentBackground(bool enabled);
     [[nodiscard]] bool StartWithWindows() const noexcept;
     void SetStartWithWindows(bool enabled);
     [[nodiscard]] bool StartHidden() const noexcept;
@@ -173,6 +187,10 @@ class SettingsBinding
     [[nodiscard]] bool SetToggleOverlayHotkey(std::string_view text);
     [[nodiscard]] std::string_view ToggleClickThroughHotkey() const noexcept;
     [[nodiscard]] bool SetToggleClickThroughHotkey(std::string_view text);
+    [[nodiscard]] std::string_view CycleViewHotkey() const noexcept;
+    [[nodiscard]] bool SetCycleViewHotkey(std::string_view text);
+    [[nodiscard]] std::string_view ToggleBackgroundHotkey() const noexcept;
+    [[nodiscard]] bool SetToggleBackgroundHotkey(std::string_view text);
 
     // ---- Bulk ---------------------------------------------------------------------------------
     // Restores the built-in defaults and reports the change exactly once.

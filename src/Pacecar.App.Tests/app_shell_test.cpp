@@ -1,7 +1,7 @@
 // T13 app-shell unit tests (headless): hotkey parsing/formatting, per-user identity names,
-// start-with-Windows command building and registry round-trip, tray tooltip formatting, and the tray
-// command set. The Win32 shell pieces (tray icon, hotkey registration, single-instance activation)
-// are covered by the integration test in lifecycle_test.cpp.
+// start-with-Windows command building and registry round-trip, tray tooltip formatting, and the
+// tray command set. The Win32 shell pieces (tray icon, hotkey registration, single-instance
+// activation) are covered by the integration test in lifecycle_test.cpp.
 
 #include <gtest/gtest.h>
 
@@ -47,8 +47,7 @@ TEST(HotkeySpec, ParsesDefaultOverlayHotkey)
 {
     const auto result = ParseHotkey(L"Ctrl+Shift+P");
     ASSERT_TRUE(result.ok()) << result.error;
-    EXPECT_EQ(result.binding.modifiers,
-              pacecar::app::kHotkeyControl | pacecar::app::kHotkeyShift);
+    EXPECT_EQ(result.binding.modifiers, pacecar::app::kHotkeyControl | pacecar::app::kHotkeyShift);
     EXPECT_EQ(result.binding.virtualKey, static_cast<std::uint32_t>(L'P'));
 }
 
@@ -56,8 +55,7 @@ TEST(HotkeySpec, ParsesModifierOrderAndFunctionKeys)
 {
     const auto result = ParseHotkey(L"alt + ctrl+F5");
     ASSERT_TRUE(result.ok()) << result.error;
-    EXPECT_EQ(result.binding.modifiers,
-              pacecar::app::kHotkeyControl | pacecar::app::kHotkeyAlt);
+    EXPECT_EQ(result.binding.modifiers, pacecar::app::kHotkeyControl | pacecar::app::kHotkeyAlt);
     EXPECT_EQ(result.binding.virtualKey, pacecar::app::kHotkeyVkF1 + 4);
 }
 
@@ -121,8 +119,8 @@ TEST(StartWithWindows, RegistryRoundTripOnDisposableKey)
     const std::wstring value = L"PacecarT13Test";
     std::wstring error;
 
-    ASSERT_TRUE(pacecar::app::WriteStartupValue(key, value, L"\"C:\\P.exe\" --start-hidden",
-                                                 &error))
+    ASSERT_TRUE(
+        pacecar::app::WriteStartupValue(key, value, L"\"C:\\P.exe\" --start-hidden", &error))
         << error;
 
     std::wstring read;
@@ -169,10 +167,16 @@ TEST(OverlayCommands, TrayMenuExposesFullSet)
     using pacecar::overlay::IsOverlayCommand;
     using pacecar::overlay::OverlayCommand;
 
-    const std::array<OverlayCommand, 8> expected{
-        OverlayCommand::ToggleVisibility, OverlayCommand::Mode, OverlayCommand::Settings,
-        OverlayCommand::History,          OverlayCommand::ToggleFrameCapture,
-        OverlayCommand::CopySystemInfo,   OverlayCommand::About, OverlayCommand::Exit};
+    const std::array<OverlayCommand, 10> expected{OverlayCommand::ToggleVisibility,
+                                                  OverlayCommand::CycleView,
+                                                  OverlayCommand::ToggleBackground,
+                                                  OverlayCommand::Mode,
+                                                  OverlayCommand::Settings,
+                                                  OverlayCommand::History,
+                                                  OverlayCommand::ToggleFrameCapture,
+                                                  OverlayCommand::CopySystemInfo,
+                                                  OverlayCommand::About,
+                                                  OverlayCommand::Exit};
     EXPECT_EQ(pacecar::overlay::kTrayMenuCommands, expected);
     for (const OverlayCommand command : pacecar::overlay::kTrayMenuCommands)
     {

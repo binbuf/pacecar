@@ -21,21 +21,21 @@ using pacecar::ConfigToJsonString;
 using pacecar::DebouncedSaver;
 using pacecar::DiskTempMode;
 using pacecar::LayoutPreset;
-using pacecar::LogLevel;
 using pacecar::Logger;
+using pacecar::LogLevel;
 using pacecar::OverlayMode;
 using pacecar::RefreshRate;
 using pacecar::Theme;
+using pacecar::ViewMode;
 using pacecar::Visualization;
 
 std::atomic<int> g_tempCounter{0};
 
 std::filesystem::path MakeTempDir()
 {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() /
-        ("pacecar_cfg_" + std::to_string(::GetCurrentProcessId()) + "_" +
-         std::to_string(g_tempCounter.fetch_add(1)));
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() /
+                                      ("pacecar_cfg_" + std::to_string(::GetCurrentProcessId()) +
+                                       "_" + std::to_string(g_tempCounter.fetch_add(1)));
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     return dir;
@@ -103,6 +103,8 @@ const char* kDefaultConfigJson = R"JSON({
     "opacity": 0.65,
     "theme": "dark",
     "layout_preset": "compact_3x3",
+    "view": "full",
+    "transparent_background": false,
     "start_with_windows": false,
     "start_hidden": false
   },
@@ -205,7 +207,9 @@ const char* kDefaultConfigJson = R"JSON({
   },
   "hotkeys": {
     "toggle_overlay": "Ctrl+Shift+P",
-    "toggle_click_through": ""
+    "toggle_click_through": "",
+    "cycle_view": "Ctrl+Shift+V",
+    "toggle_background": "Ctrl+Shift+B"
   }
 })JSON";
 
@@ -251,12 +255,11 @@ TEST(ConfigSerialization, MissingKeysUseDefaults)
     EXPECT_EQ(config.general.refresh, RefreshRate::Ms1000);
     EXPECT_EQ(config.overlay.mode, OverlayMode::Interactive);
     EXPECT_EQ(config.sensors.ping_target, "8.8.8.8");
-    EXPECT_EQ(ConfigToJsonString(config),
-              [] {
-                  Config merged = Config::Defaults();
-                  merged.general.opacity = 0.5;
-                  return ConfigToJsonString(merged);
-              }());
+    EXPECT_EQ(ConfigToJsonString(config), [] {
+        Config merged = Config::Defaults();
+        merged.general.opacity = 0.5;
+        return ConfigToJsonString(merged);
+    }());
 }
 
 TEST(ConfigSerialization, MalformedJsonReturnsFalse)
@@ -399,14 +402,12 @@ TEST_F(ConfigLoggerTest, MalformedFileLogsWarningAndFallsBack)
     Logger& logger = Logger::Instance();
     logger.SetDiagnosticsEnabled(true);
     int warnings = 0;
-    logger.SetSink(
-        [&](LogLevel level, std::wstring_view)
+    logger.SetSink([&](LogLevel level, std::wstring_view) {
+        if (level == LogLevel::Warn)
         {
-            if (level == LogLevel::Warn)
-            {
-                ++warnings;
-            }
-        });
+            ++warnings;
+        }
+    });
 
     const std::filesystem::path path = dir_ / "config.json";
     {
@@ -450,6 +451,30 @@ TEST_F(ConfigFileTest, SaveReplacesExistingFile)
 
     const Config loaded = Config::Load(path);
     EXPECT_EQ(ConfigToJsonString(loaded), ConfigToJsonString(second));
+}
+
+TEST(ConfigSerialization, ViewAndBackgroundRoundTrip)
+{
+    Config config = Config::Defaults();
+    config.general.view = ViewMode::LargeVisuals;
+    config.general.transparent_background = true;
+    config.hotkeys.cycle_view = "Ctrl+Alt+V";
+    config.hotkeys.toggle_background = "Ctrl+Alt+B";
+
+    Config loaded;
+    ASSERT_TRUE(ConfigFromJsonString(ConfigToJsonString(config), loaded));
+    EXPECT_EQ(loaded.general.view, ViewMode::LargeVisuals);
+    EXPECT_TRUE(loaded.general.transparent_background);
+    EXPECT_EQ(loaded.hotkeys.cycle_view, "Ctrl+Alt+V");
+    EXPECT_EQ(loaded.hotkeys.toggle_background, "Ctrl+Alt+B");
+}
+
+TEST(ConfigClamp, OutOfRangeViewFallsBack)
+{
+    Config config = Config::Defaults();
+    config.general.view = static_cast<ViewMode>(99);
+    config.Clamp();
+    EXPECT_EQ(config.general.view, ViewMode::Full);
 }
 
 TEST(ConfigDebounce, CoalescesRapidMutations)

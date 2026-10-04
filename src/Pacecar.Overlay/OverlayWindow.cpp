@@ -41,8 +41,8 @@ BOOL CALLBACK EnumMonitorProc(HMONITOR monitor, HDC /*hdc*/, LPRECT /*rect*/, LP
     }
     MonitorWorkArea area;
     area.deviceName = info.szDevice;
-    area.workArea = IntRect{info.rcWork.left, info.rcWork.top, info.rcWork.right,
-                            info.rcWork.bottom};
+    area.workArea =
+        IntRect{info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom};
     area.primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
     UINT dpiX = 96;
     UINT dpiY = 96;
@@ -78,8 +78,7 @@ std::vector<MonitorWorkArea> EnumerateMonitorWorkAreas()
     std::vector<MonitorWorkArea> monitors;
     EnumDisplayMonitors(nullptr, nullptr, EnumMonitorProc, reinterpret_cast<LPARAM>(&monitors));
     std::stable_sort(monitors.begin(), monitors.end(),
-                     [](const MonitorWorkArea& a, const MonitorWorkArea& b)
-                     {
+                     [](const MonitorWorkArea& a, const MonitorWorkArea& b) {
                          if (a.primary != b.primary)
                          {
                              return a.primary;
@@ -186,9 +185,9 @@ bool OverlayWindow::CreateWindowForRecipe(OverlayRecipe recipe)
     DWORD exStyle = RecipeExtendedStyle(recipe);
     if (clickThrough_)
     {
-        const bool clearStyle = recipe == OverlayRecipe::Layered ||
-                                options_.compositionClickThrough ==
-                                    CompositionClickThrough::TransparentExStyle;
+        const bool clearStyle =
+            recipe == OverlayRecipe::Layered ||
+            options_.compositionClickThrough == CompositionClickThrough::TransparentExStyle;
         if (clearStyle)
         {
             exStyle |= WS_EX_TRANSPARENT;
@@ -196,9 +195,8 @@ bool OverlayWindow::CreateWindowForRecipe(OverlayRecipe recipe)
     }
     // WS_THICKFRAME enables the native sizing loop for the WM_NCHITTEST edge codes; WM_NCCALCSIZE
     // removes the drawn frame so the panel still fills the whole window.
-    hwnd_ = CreateWindowExW(exStyle, kWindowClassName, L"Pacecar Overlay",
-                            WS_POPUP | WS_THICKFRAME, CW_USEDEFAULT, 0,
-                            CW_USEDEFAULT, 0, nullptr, nullptr, instance_, this);
+    hwnd_ = CreateWindowExW(exStyle, kWindowClassName, L"Pacecar Overlay", WS_POPUP | WS_THICKFRAME,
+                            CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, instance_, this);
     return hwnd_ != nullptr;
 }
 
@@ -303,8 +301,7 @@ void OverlayWindow::SetClickThrough(bool enabled)
     }
     clickThrough_ = enabled;
 
-    const bool useExStyle =
-        renderer_ != nullptr && renderer_->Recipe() == OverlayRecipe::Layered;
+    const bool useExStyle = renderer_ != nullptr && renderer_->Recipe() == OverlayRecipe::Layered;
     const bool compositionExStyle =
         renderer_ != nullptr && renderer_->Recipe() == OverlayRecipe::Composition &&
         options_.compositionClickThrough == CompositionClickThrough::TransparentExStyle;
@@ -362,6 +359,7 @@ void OverlayWindow::ApplyConfig(const pacecar::Config& config)
     options_.panelOpacity = config.general.opacity;
     options_.theme = config.general.theme;
     options_.alwaysOnTop = config.overlay.always_on_top;
+    transparentBackground_ = config.general.transparent_background;
     if (renderer_ == nullptr)
     {
         return;
@@ -483,8 +481,7 @@ LRESULT OverlayWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     {
     case WM_ERASEBKGND:
         return 1; // The renderer owns every pixel; never let USER paint the background.
-    case WM_PAINT:
-    {
+    case WM_PAINT: {
         PAINTSTRUCT paint{};
         BeginPaint(hwnd_, &paint);
         EndPaint(hwnd_, &paint);
@@ -615,8 +612,7 @@ LRESULT OverlayWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
             PostQuitMessage(0);
         }
         return 0;
-    case WM_NCDESTROY:
-    {
+    case WM_NCDESTROY: {
         HWND hwnd = hwnd_;
         hwnd_ = nullptr;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
@@ -685,9 +681,9 @@ void OverlayWindow::PublishPlacement()
     const MonitorWorkArea* monitor = FindBestMonitor(current, monitors_);
     if (monitor != nullptr)
     {
-        const auto it = std::find_if(monitors_.begin(), monitors_.end(),
-                                     [monitor](const MonitorWorkArea& candidate)
-                                     { return &candidate == monitor; });
+        const auto it = std::find_if(
+            monitors_.begin(), monitors_.end(),
+            [monitor](const MonitorWorkArea& candidate) { return &candidate == monitor; });
         placement.monitor_id = static_cast<int>(std::distance(monitors_.begin(), it));
     }
     positionChanged_(placement);
@@ -708,8 +704,8 @@ HMONITOR OverlayWindow::CurrentMonitor() const
     return MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST);
 }
 
-pacecar::MonitorRect OverlayWindow::PlacementFor(
-    const std::optional<pacecar::MonitorRect>& saved, unsigned dpi)
+pacecar::MonitorRect OverlayWindow::PlacementFor(const std::optional<pacecar::MonitorRect>& saved,
+                                                 unsigned dpi)
 {
     IntRect desired{};
     if (saved.has_value() && saved->valid && saved->width > 0 && saved->height > 0)
@@ -724,7 +720,8 @@ pacecar::MonitorRect OverlayWindow::PlacementFor(
         const int margin = DipToPixels(24.0f, dpi);
         const int left = primary != nullptr ? primary->workArea.left : 0;
         const int top = primary != nullptr ? primary->workArea.top : 0;
-        desired = IntRect{left + margin, top + margin, left + margin + width, top + margin + height};
+        desired =
+            IntRect{left + margin, top + margin, left + margin + width, top + margin + height};
     }
 
     const IntRect clamped = ClampToWorkArea(desired, monitors_);
@@ -738,16 +735,16 @@ pacecar::MonitorRect OverlayWindow::PlacementFor(
     const MonitorWorkArea* monitor = FindBestMonitor(clamped, monitors_);
     if (monitor != nullptr)
     {
-        const auto it = std::find_if(monitors_.begin(), monitors_.end(),
-                                     [monitor](const MonitorWorkArea& candidate)
-                                     { return &candidate == monitor; });
+        const auto it = std::find_if(
+            monitors_.begin(), monitors_.end(),
+            [monitor](const MonitorWorkArea& candidate) { return &candidate == monitor; });
         placement.monitor_id = static_cast<int>(std::distance(monitors_.begin(), it));
     }
     else if (const MonitorWorkArea* primary = PrimaryMonitor(monitors_))
     {
-        const auto it = std::find_if(monitors_.begin(), monitors_.end(),
-                                     [primary](const MonitorWorkArea& candidate)
-                                     { return &candidate == primary; });
+        const auto it = std::find_if(
+            monitors_.begin(), monitors_.end(),
+            [primary](const MonitorWorkArea& candidate) { return &candidate == primary; });
         placement.monitor_id = static_cast<int>(std::distance(monitors_.begin(), it));
     }
     return placement;
@@ -825,7 +822,12 @@ void OverlayWindow::ShowContextMenu(POINT screenPoint)
         {
             flags |= MF_CHECKED;
         }
-        if (AppendMenuW(menu, flags, static_cast<UINT_PTR>(command), CommandLabel(command)) == FALSE)
+        if (command == OverlayCommand::ToggleBackground && transparentBackground_)
+        {
+            flags |= MF_CHECKED;
+        }
+        if (AppendMenuW(menu, flags, static_cast<UINT_PTR>(command), CommandLabel(command)) ==
+            FALSE)
         {
             DestroyMenu(menu);
             return;
@@ -861,6 +863,8 @@ void OverlayWindow::ExecuteCommand(OverlayCommand command)
     case OverlayCommand::CopySystemInfo:
     case OverlayCommand::About:
     case OverlayCommand::ToggleFrameCapture:
+    case OverlayCommand::CycleView:
+    case OverlayCommand::ToggleBackground:
         if (commandCallback_)
         {
             commandCallback_(command);

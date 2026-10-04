@@ -14,5 +14,11 @@ struct WidgetStyles
     std::uint32_t label = 0;
     std::uint32_t primary = 0;
     std::uint32_t secondary = 0;
+    // Alternate value sizes so each view can pick a density-appropriate readout without
+    // re-registering formats.
+    std::uint32_t primarySmall = 0;
+    std::uint32_t primaryLarge = 0;
+    std::uint32_t primaryXl = 0;
+    std::uint32_t secondaryLarge = 0;
 };
 } // namespace pacecar::overlay

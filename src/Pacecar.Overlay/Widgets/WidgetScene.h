@@ -2,8 +2,8 @@
 
 // The draw-only widget scene: panel + header + the configured tile layout. The layout engine
 // (T11) decides the rectangles and field flags; this class only draws them. T12 feeds live values
-// through `SetContent`. The scene holds all caches (text layouts, brushes, gauge/sparkline geometry)
-// so a steady-state redraw of unchanged content performs no heap allocation.
+// through `SetContent`. The scene holds all caches (text layouts, brushes, gauge/sparkline
+// geometry) so a steady-state redraw of unchanged content performs no heap allocation.
 
 #include <array>
 #include <memory>
@@ -65,8 +65,8 @@ class WidgetScene
     std::array<std::array<wchar_t, 32>, kMaxTiles> tertiaryBuffers_{};
 
     void DrawDemoTile(ID2D1RenderTarget* target, const TilePlacement& placement, std::size_t index,
-                      const ResolvedTheme& theme);
+                      const WidgetStyles& styles, const ResolvedTheme& theme);
     void DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& placement, std::size_t index,
-                      const ResolvedTheme& theme);
+                      const WidgetStyles& styles, const ResolvedTheme& theme);
 };
 } // namespace pacecar::overlay

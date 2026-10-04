@@ -8,8 +8,8 @@
 // (08-project-layout-and-testing.md "Testing strategy"). All coordinates are device-independent
 // pixels (DIPs); the render target DPI does the physical scaling (`DipToPixels`).
 //
-// Nothing here allocates: the result is a fixed-capacity `std::array`, so the engine is safe to call
-// from the render path every frame.
+// Nothing here allocates: the result is a fixed-capacity `std::array`, so the engine is safe to
+// call from the render path every frame.
 
 #include <array>
 #include <cstddef>
@@ -65,12 +65,19 @@ struct TileSettings
 struct LayoutSettings
 {
     pacecar::LayoutPreset preset = pacecar::LayoutPreset::Compact3x3;
+    // Presentation view. Full/LargeVisuals honor `preset`; the text views imply their own compact
+    // arrangement. `ApplyViewMode` (below) resolves the per-view visibility, fields, and metrics.
+    pacecar::ViewMode view = pacecar::ViewMode::Full;
     std::array<TileSettings, kMaxTiles> tiles{};
     TileLayoutMetrics tileMetrics{};
     float panelPadding = kLayoutPanelPadding;
     float headerHeight = kLayoutHeaderHeight;
     float headerGap = kLayoutHeaderGap;
     float tileGap = kLayoutTileGap;
+    // Whether the panel fill/border is drawn. False makes the overlay text/graphics only.
+    bool drawBackground = true;
+    // Whether the "PACECAR" header band is reserved and drawn.
+    bool drawHeader = true;
 };
 
 // A placed tile: its identity, window-space rectangle (DIPs), and the resolved fields to draw.
@@ -110,6 +117,13 @@ struct LayoutResult
 // overlay calls this every frame; the config's `tiles.fps.visible` is intentionally ignored.
 void SetFrameCaptureTileVisible(LayoutSettings& settings, bool active) noexcept;
 
-// Maps a `Config` (general preset, tiles toggles, custom geometry) into engine settings.
+// Applies a view's presentation policy to `settings` in place: which tiles are visible, each
+// tile's field flags and metrics, and the arrangement used by the text views. Called by
+// `LayoutSettingsFromConfig` after the config toggles are mapped, so an explicit view overrides the
+// per-tile config for the duration of that view.
+void ApplyViewMode(LayoutSettings& settings, pacecar::ViewMode view) noexcept;
+
+// Maps a `Config` (general preset/view/background, tiles toggles, custom geometry) into engine
+// settings. The active `ViewMode` is applied last.
 [[nodiscard]] LayoutSettings LayoutSettingsFromConfig(const pacecar::Config& config) noexcept;
 } // namespace pacecar::overlay

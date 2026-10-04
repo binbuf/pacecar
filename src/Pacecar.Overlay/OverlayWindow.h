@@ -114,11 +114,12 @@ class OverlayWindow
     void ApplyCaptureExclusion(bool enabled);
 
     // Applies config-driven theme and layout to the live renderer without recreating the window, so
-// preset/toggle/theme changes take effect immediately (design ref 04-ui-ux.md).
+    // preset/toggle/theme changes take effect immediately (design ref 04-ui-ux.md).
     void ApplyConfig(const pacecar::Config& config);
 
-    // Publishes a new metrics frame to the renderer (no-op when no renderer exists). The frame is held
-// until the next one; a null frame restores the placeholders.
+    // Publishes a new metrics frame to the renderer (no-op when no renderer exists). The frame is
+    // held
+    // until the next one; a null frame restores the placeholders.
     void SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame);
 
     // Marks the renderer dirty and presents immediately if the window is visible and not suspended.
@@ -187,8 +188,8 @@ class OverlayWindow
     void NotifyVisibilityChanged();
     [[nodiscard]] unsigned WindowDpi() const;
     [[nodiscard]] HMONITOR CurrentMonitor() const;
-    [[nodiscard]] pacecar::MonitorRect PlacementFor(const std::optional<pacecar::MonitorRect>& saved,
-                                                    unsigned dpi);
+    [[nodiscard]] pacecar::MonitorRect PlacementFor(
+        const std::optional<pacecar::MonitorRect>& saved, unsigned dpi);
     [[nodiscard]] DWORD RecipeExtendedStyle(OverlayRecipe recipe) const;
 
     HINSTANCE instance_ = nullptr;
@@ -196,6 +197,7 @@ class OverlayWindow
     OverlayOptions options_{};
     std::unique_ptr<IRenderer> renderer_;
     bool clickThrough_ = true;
+    bool transparentBackground_ = false;
     bool captureExclusionApplied_ = false;
     std::vector<MonitorWorkArea> monitors_;
     PositionChangedCallback positionChanged_;

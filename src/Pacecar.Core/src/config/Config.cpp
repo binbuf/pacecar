@@ -187,6 +187,8 @@ constexpr auto kThemeNames =
     std::array<std::pair<const char*, int>, 3>{{{"dark", 0}, {"light", 1}, {"high_contrast", 2}}};
 constexpr auto kLayoutNames = std::array<std::pair<const char*, int>, 4>{
     {{"compact_3x3", 0}, {"vertical_1x6", 1}, {"auto_fit", 2}, {"custom", 3}}};
+constexpr auto kViewNames = std::array<std::pair<const char*, int>, 4>{
+    {{"full", 0}, {"large_visuals", 1}, {"small_text", 2}, {"fps_only", 3}}};
 constexpr auto kOverlayModeNames =
     std::array<std::pair<const char*, int>, 2>{{{"interactive", 0}, {"click_through", 1}}};
 constexpr auto kVisualizationNames =
@@ -223,6 +225,22 @@ const char* LayoutToString(LayoutPreset layout)
     case LayoutPreset::Compact3x3:
     default:
         return "compact_3x3";
+    }
+}
+
+const char* ViewToString(ViewMode view)
+{
+    switch (view)
+    {
+    case ViewMode::LargeVisuals:
+        return "large_visuals";
+    case ViewMode::SmallText:
+        return "small_text";
+    case ViewMode::FpsOnly:
+        return "fps_only";
+    case ViewMode::Full:
+    default:
+        return "full";
     }
 }
 
@@ -266,12 +284,8 @@ const char* MainboardModeToString(MainboardTempMode mode)
 
 void to_json(Json& j, const MonitorRect& rect)
 {
-    j = Json{{"monitor_id", rect.monitor_id},
-             {"x", rect.x},
-             {"y", rect.y},
-             {"width", rect.width},
-             {"height", rect.height},
-             {"valid", rect.valid}};
+    j = Json{{"monitor_id", rect.monitor_id}, {"x", rect.x},           {"y", rect.y},
+             {"width", rect.width},           {"height", rect.height}, {"valid", rect.valid}};
 }
 
 void from_json(const Json& j, MonitorRect& rect)
@@ -304,19 +318,15 @@ void from_json(const Json& j, TileConfig& tile)
     tile.show_secondary = GetBool(j, "show_secondary", defaults.show_secondary);
     tile.show_tertiary = GetBool(j, "show_tertiary", defaults.show_tertiary);
     tile.show_visualization = GetBool(j, "show_visualization", defaults.show_visualization);
-    tile.visualization = static_cast<Visualization>(
-        ParseEnumIndex(j, "visualization", kVisualizationNames, static_cast<int>(defaults.visualization)));
+    tile.visualization = static_cast<Visualization>(ParseEnumIndex(
+        j, "visualization", kVisualizationNames, static_cast<int>(defaults.visualization)));
     tile.mini_sparklines = GetBool(j, "mini_sparklines", defaults.mini_sparklines);
 }
 
 void to_json(Json& j, const CustomTilePlacement& placement)
 {
-    j = Json{{"tile", placement.tile},
-             {"x", placement.x},
-             {"y", placement.y},
-             {"width", placement.width},
-             {"height", placement.height},
-             {"valid", placement.valid}};
+    j = Json{{"tile", placement.tile},   {"x", placement.x},           {"y", placement.y},
+             {"width", placement.width}, {"height", placement.height}, {"valid", placement.valid}};
 }
 
 void from_json(const Json& j, CustomTilePlacement& placement)
@@ -353,15 +363,14 @@ void from_json(const Json& j, LayoutConfig& layout)
 
 void to_json(Json& j, const TilesConfig& tiles)
 {
-    j = Json{{"cpu", tiles.cpu},       {"ram", tiles.ram},       {"gpu", tiles.gpu},
-             {"network", tiles.network}, {"disk", tiles.disk},    {"ping", tiles.ping},
+    j = Json{{"cpu", tiles.cpu},         {"ram", tiles.ram},   {"gpu", tiles.gpu},
+             {"network", tiles.network}, {"disk", tiles.disk}, {"ping", tiles.ping},
              {"fps", tiles.fps}};
 }
 
 void from_json(const Json& j, TilesConfig& tiles)
 {
-    const auto sub = [&j](const char* key) -> Json
-    {
+    const auto sub = [&j](const char* key) -> Json {
         const auto it = j.find(key);
         return (it != j.end() && it->is_object()) ? *it : Json::object();
     };
@@ -384,6 +393,8 @@ void to_json(Json& j, const GeneralConfig& general)
              {"opacity", general.opacity},
              {"theme", ThemeToString(general.theme)},
              {"layout_preset", LayoutToString(general.layout)},
+             {"view", ViewToString(general.view)},
+             {"transparent_background", general.transparent_background},
              {"start_with_windows", general.start_with_windows},
              {"start_hidden", general.start_hidden}};
 }
@@ -392,13 +403,17 @@ void from_json(const Json& j, GeneralConfig& general)
 {
     const GeneralConfig defaults{};
     const int refresh = GetInt(j, "refresh_ms", static_cast<int>(defaults.refresh));
-    general.refresh = static_cast<RefreshRate>(NearestAllowed(refresh, kAllowedRefresh,
-                                                              static_cast<int>(defaults.refresh)));
+    general.refresh = static_cast<RefreshRate>(
+        NearestAllowed(refresh, kAllowedRefresh, static_cast<int>(defaults.refresh)));
     general.opacity = GetDouble(j, "opacity", defaults.opacity);
     general.theme = static_cast<Theme>(
         ParseEnumIndex(j, "theme", kThemeNames, static_cast<int>(defaults.theme)));
     general.layout = static_cast<LayoutPreset>(
         ParseEnumIndex(j, "layout_preset", kLayoutNames, static_cast<int>(defaults.layout)));
+    general.view = static_cast<ViewMode>(
+        ParseEnumIndex(j, "view", kViewNames, static_cast<int>(defaults.view)));
+    general.transparent_background =
+        GetBool(j, "transparent_background", defaults.transparent_background);
     general.start_with_windows = GetBool(j, "start_with_windows", defaults.start_with_windows);
     general.start_hidden = GetBool(j, "start_hidden", defaults.start_hidden);
 }
@@ -468,15 +483,16 @@ void from_json(const Json& j, SensorsConfig& sensors)
     sensors.disk_temperature = GetBool(j, "disk_temperature", defaults.disk_temperature);
     sensors.fan_speed = GetBool(j, "fan_speed", defaults.fan_speed);
     sensors.ram_temperature = GetBool(j, "ram_temperature", defaults.ram_temperature);
-    sensors.mainboard_temperature = GetBool(j, "mainboard_temperature", defaults.mainboard_temperature);
+    sensors.mainboard_temperature =
+        GetBool(j, "mainboard_temperature", defaults.mainboard_temperature);
     sensors.deep_sensors = GetBool(j, "deep_sensors", defaults.deep_sensors);
     sensors.fps_capture = GetBool(j, "fps_capture", defaults.fps_capture);
-    sensors.disk_temp_mode = static_cast<DiskTempMode>(
-        ParseEnumIndex(j, "disk_temp_mode", kDiskTempNames, static_cast<int>(defaults.disk_temp_mode)));
+    sensors.disk_temp_mode = static_cast<DiskTempMode>(ParseEnumIndex(
+        j, "disk_temp_mode", kDiskTempNames, static_cast<int>(defaults.disk_temp_mode)));
     sensors.fan_mode = static_cast<FanSpeedMode>(
         ParseEnumIndex(j, "fan_mode", kFanModeNames, static_cast<int>(defaults.fan_mode)));
-    sensors.mainboard_mode = static_cast<MainboardTempMode>(
-        ParseEnumIndex(j, "mainboard_mode", kFanModeNames, static_cast<int>(defaults.mainboard_mode)));
+    sensors.mainboard_mode = static_cast<MainboardTempMode>(ParseEnumIndex(
+        j, "mainboard_mode", kFanModeNames, static_cast<int>(defaults.mainboard_mode)));
     sensors.ping_target = GetString(j, "ping_target", defaults.ping_target);
 }
 
@@ -496,14 +512,19 @@ void from_json(const Json& j, HistoryConfig& history)
 void to_json(Json& j, const HotkeysConfig& hotkeys)
 {
     j = Json{{"toggle_overlay", hotkeys.toggle_overlay},
-             {"toggle_click_through", hotkeys.toggle_click_through}};
+             {"toggle_click_through", hotkeys.toggle_click_through},
+             {"cycle_view", hotkeys.cycle_view},
+             {"toggle_background", hotkeys.toggle_background}};
 }
 
 void from_json(const Json& j, HotkeysConfig& hotkeys)
 {
     const HotkeysConfig defaults{};
     hotkeys.toggle_overlay = GetString(j, "toggle_overlay", defaults.toggle_overlay);
-    hotkeys.toggle_click_through = GetString(j, "toggle_click_through", defaults.toggle_click_through);
+    hotkeys.toggle_click_through =
+        GetString(j, "toggle_click_through", defaults.toggle_click_through);
+    hotkeys.cycle_view = GetString(j, "cycle_view", defaults.cycle_view);
+    hotkeys.toggle_background = GetString(j, "toggle_background", defaults.toggle_background);
 }
 
 void to_json(Json& j, const Config& config)
@@ -523,8 +544,7 @@ void from_json(const Json& j, Config& config)
     const Config defaults{};
     config.schema_version = GetInt(j, "schema_version", defaults.schema_version);
 
-    const auto sub = [&j](const char* key) -> Json
-    {
+    const auto sub = [&j](const char* key) -> Json {
         const auto it = j.find(key);
         return (it != j.end() && it->is_object()) ? *it : Json::object();
     };
@@ -556,9 +576,8 @@ void Config::Clamp()
         schema_version = 1;
     }
 
-    general.refresh = static_cast<RefreshRate>(
-        NearestAllowed(static_cast<int>(general.refresh), kAllowedRefresh,
-                       static_cast<int>(RefreshRate::Ms1000)));
+    general.refresh = static_cast<RefreshRate>(NearestAllowed(
+        static_cast<int>(general.refresh), kAllowedRefresh, static_cast<int>(RefreshRate::Ms1000)));
 
     if (!std::isfinite(general.opacity))
     {
@@ -566,8 +585,13 @@ void Config::Clamp()
     }
     general.opacity = std::clamp(general.opacity, 0.1, 1.0);
 
-    history.retention_minutes =
-        NearestAllowed(history.retention_minutes, kAllowedRetention, 30);
+    if (static_cast<int>(general.view) < static_cast<int>(ViewMode::Full) ||
+        static_cast<int>(general.view) > static_cast<int>(ViewMode::FpsOnly))
+    {
+        general.view = ViewMode::Full;
+    }
+
+    history.retention_minutes = NearestAllowed(history.retention_minutes, kAllowedRetention, 30);
 
     if (overlay.monitor_id < 0)
     {
@@ -824,8 +848,7 @@ void DebouncedSaver::Worker()
         }
 
         const auto deadline = deadline_;
-        cv_.wait_until(lock, deadline,
-                       [this, deadline] { return stop_ || deadline_ != deadline; });
+        cv_.wait_until(lock, deadline, [this, deadline] { return stop_ || deadline_ != deadline; });
         if (stop_)
         {
             break;

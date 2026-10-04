@@ -32,6 +32,8 @@ constexpr int kIdThemeCombo = 1013;
 constexpr int kIdLayoutCombo = 1014;
 constexpr int kIdStartWindows = 1015;
 constexpr int kIdStartHidden = 1016;
+constexpr int kIdViewCombo = 1017;
+constexpr int kIdTransparentBackground = 1018;
 
 constexpr int kIdModeCombo = 1020;
 constexpr int kIdAlwaysOnTop = 1021;
@@ -58,6 +60,8 @@ constexpr int kIdRetentionCombo = 1400;
 
 constexpr int kIdOverlayHotkey = 1410;
 constexpr int kIdClickThroughHotkey = 1411;
+constexpr int kIdCycleViewHotkey = 1412;
+constexpr int kIdBackgroundHotkey = 1413;
 
 constexpr int kIdAboutText = 1420;
 constexpr int kIdCopyInfo = 1421;
@@ -139,8 +143,7 @@ LRESULT CALLBACK HotkeyCaptureProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
         InvalidateRect(hwnd, nullptr, TRUE);
         return 0;
     case WM_KEYDOWN:
-    case WM_SYSKEYDOWN:
-    {
+    case WM_SYSKEYDOWN: {
         const std::uint32_t vk = static_cast<std::uint32_t>(wParam);
         if (vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU || vk == VK_LWIN || vk == VK_RWIN)
         {
@@ -179,12 +182,11 @@ LRESULT CALLBACK HotkeyCaptureProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
             return 0; // Unsupported key: leave the previous value in place.
         }
         SetWindowTextW(hwnd, text.c_str());
-        PostMessageW(GetParent(hwnd), kWmHotkeyCaptured,
-                     static_cast<WPARAM>(GetDlgCtrlID(hwnd)), 0);
+        PostMessageW(GetParent(hwnd), kWmHotkeyCaptured, static_cast<WPARAM>(GetDlgCtrlID(hwnd)),
+                     0);
         return 0;
     }
-    case WM_PAINT:
-    {
+    case WM_PAINT: {
         PAINTSTRUCT paint{};
         HDC dc = BeginPaint(hwnd, &paint);
         RECT rect{};
@@ -299,8 +301,8 @@ bool SettingsWindow::Create(HINSTANCE instance)
     InitCommonControlsEx(&controls);
 
     hwnd_ = CreateWindowExW(WS_EX_CONTROLPARENT, kSettingsClassName, L"Pacecar Settings",
-                            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, 540,
-                            470, nullptr, nullptr, instance, this);
+                            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT,
+                            540, 470, nullptr, nullptr, instance, this);
     if (hwnd_ == nullptr)
     {
         return false;
@@ -340,9 +342,9 @@ void SettingsWindow::BuildPages()
     pages_[kPageHotkeys].title = L"Hotkeys";
     pages_[kPageAbout].title = L"About";
 
-    tab_ = CreateWindowExW(0, WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
-                           8, 8, 500, 380, hwnd_,
-                           reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdTab)), instance_, nullptr);
+    tab_ = CreateWindowExW(0, WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, 8, 8,
+                           500, 380, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdTab)),
+                           instance_, nullptr);
     SetControlFont(tab_);
     for (int i = 0; i < kPageCount; ++i)
     {
@@ -362,21 +364,20 @@ void SettingsWindow::BuildPages()
 
     // Always-visible footer.
     HWND reset = CreateWindowExW(0, L"BUTTON", L"Reset to defaults",
-                                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 8, 400, 130, 26,
-                                 hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdReset)),
+                                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 8, 400, 130,
+                                 26, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdReset)),
                                  instance_, nullptr);
     SetControlFont(reset);
-    HWND close = CreateWindowExW(0, L"BUTTON", L"Close",
-                                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 430, 400, 80,
-                                 26, hwnd_,
-                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdClose)), instance_,
-                                 nullptr);
+    HWND close = CreateWindowExW(
+        0, L"BUTTON", L"Close", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 430, 400, 80,
+        26, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdClose)), instance_, nullptr);
     SetControlFont(close);
 }
 
 namespace
 {
-HWND MakeLabel(HWND parent, HINSTANCE instance, const wchar_t* text, int x, int y, int w, int h = 18)
+HWND MakeLabel(HWND parent, HINSTANCE instance, const wchar_t* text, int x, int y, int w,
+               int h = 18)
 {
     HWND label = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT, x, y, w, h,
                                  parent, nullptr, instance, nullptr);
@@ -392,32 +393,31 @@ void SettingsWindow::BuildGeneralPage()
     AddControl(page, MakeLabel(hwnd_, instance_, L"Opacity:", 16, 80, 120));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Theme:", 16, 112, 120));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Layout preset:", 16, 144, 120));
+    AddControl(page, MakeLabel(hwnd_, instance_, L"View:", 16, 176, 120));
 
-    HWND refresh = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                                             CBS_DROPDOWNLIST | WS_VSCROLL, 150, 45,
-                                   140, 200, hwnd_,
-                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdRefreshCombo)),
-                                   instance_, nullptr);
+    HWND refresh = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        150, 45, 140, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdRefreshCombo)),
+        instance_, nullptr);
     AddControl(page, refresh);
     for (const int value : kRefreshOptions)
     {
-        SendMessageW(refresh, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(std::to_wstring(value).c_str()));
+        SendMessageW(refresh, CB_ADDSTRING, 0,
+                     reinterpret_cast<LPARAM>(std::to_wstring(value).c_str()));
     }
 
-    HWND opacity = CreateWindowExW(0, TRACKBAR_CLASSW, L"",
-                                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_NOTICKS, 150,
-                                   78, 180, 24, hwnd_,
-                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdOpacitySlider)),
-                                   instance_, nullptr);
+    HWND opacity = CreateWindowExW(
+        0, TRACKBAR_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_NOTICKS, 150,
+        78, 180, 24, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdOpacitySlider)),
+        instance_, nullptr);
     AddControl(page, opacity);
     SendMessageW(opacity, TBM_SETRANGE, TRUE, MAKELPARAM(10, 100));
     AddControl(page, MakeLabel(hwnd_, instance_, L"100%", 336, 80, 60));
 
-    HWND theme = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                                           CBS_DROPDOWNLIST | WS_VSCROLL, 150, 109, 140,
-                                 200, hwnd_,
-                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdThemeCombo)),
-                                 instance_, nullptr);
+    HWND theme = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        150, 109, 140, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdThemeCombo)),
+        instance_, nullptr);
     AddControl(page, theme);
     const std::array<const wchar_t*, 3> themeNames{L"Dark", L"Light", L"High Contrast"};
     for (const wchar_t* name : themeNames)
@@ -425,11 +425,10 @@ void SettingsWindow::BuildGeneralPage()
         SendMessageW(theme, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
     }
 
-    HWND layout = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                                            CBS_DROPDOWNLIST | WS_VSCROLL, 150, 141, 180,
-                                  200, hwnd_,
-                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdLayoutCombo)),
-                                  instance_, nullptr);
+    HWND layout = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        150, 141, 180, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdLayoutCombo)),
+        instance_, nullptr);
     AddControl(page, layout);
     const std::array<const wchar_t*, 4> layoutNames{L"Compact 3x3", L"Vertical 1x6", L"Auto-fit",
                                                     L"Custom"};
@@ -438,14 +437,33 @@ void SettingsWindow::BuildGeneralPage()
         SendMessageW(layout, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
     }
 
+    HWND view = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        150, 173, 180, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdViewCombo)),
+        instance_, nullptr);
+    AddControl(page, view);
+    const std::array<const wchar_t*, 4> viewNames{L"Full panel", L"Large visuals", L"Small text",
+                                                  L"FPS only"};
+    for (const wchar_t* name : viewNames)
+    {
+        SendMessageW(view, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
+    }
+
+    AddControl(page,
+               CreateWindowExW(
+                   0, L"BUTTON", L"Transparent background (text only)",
+                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 202, 300, 22, hwnd_,
+                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdTransparentBackground)),
+                   instance_, nullptr));
+
     AddControl(page, CreateWindowExW(0, L"BUTTON", L"Start with Windows",
-                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 178, 220,
-                                     22, hwnd_,
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 234,
+                                     220, 22, hwnd_,
                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdStartWindows)),
                                      instance_, nullptr));
     AddControl(page, CreateWindowExW(0, L"BUTTON", L"Start hidden (tray only)",
-                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 204, 260,
-                                     22, hwnd_,
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 260,
+                                     260, 22, hwnd_,
                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdStartHidden)),
                                      instance_, nullptr));
 }
@@ -456,20 +474,18 @@ void SettingsWindow::BuildOverlayPage()
     AddControl(page, MakeLabel(hwnd_, instance_, L"Mode:", 16, 48, 120));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Monitor:", 16, 80, 120));
 
-    HWND mode = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                                         CBS_DROPDOWNLIST | WS_VSCROLL, 150, 45, 160,
-                                 200, hwnd_,
-                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdModeCombo)), instance_,
-                                 nullptr);
+    HWND mode = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        150, 45, 160, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdModeCombo)),
+        instance_, nullptr);
     AddControl(page, mode);
     SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Interactive"));
     SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Click-through"));
 
-    HWND monitor = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                                            CBS_DROPDOWNLIST | WS_VSCROLL, 150, 77, 200,
-                                  200, hwnd_,
-                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdMonitorCombo)),
-                                  instance_, nullptr);
+    HWND monitor = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        150, 77, 200, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdMonitorCombo)),
+        instance_, nullptr);
     AddControl(page, monitor);
     const std::vector<MonitorWorkArea> monitors = EnumerateMonitorWorkAreas();
     for (std::size_t i = 0; i < monitors.size(); ++i)
@@ -483,24 +499,26 @@ void SettingsWindow::BuildOverlayPage()
     }
 
     AddControl(page, CreateWindowExW(0, L"BUTTON", L"Always on top",
-                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 116, 220,
-                                     22, hwnd_,
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 116,
+                                     220, 22, hwnd_,
                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdAlwaysOnTop)),
                                      instance_, nullptr));
-    AddControl(page, CreateWindowExW(0, L"BUTTON", L"Exclude from screen capture",
-                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 142, 300,
-                                     22, hwnd_,
-                                     reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdCaptureExclusion)),
-                                     instance_, nullptr));
-    AddControl(page, MakeLabel(hwnd_, instance_,
-                               L"Enhanced fullscreen is reserved and is not available in this build.",
-                               16, 176, 420, 18));
+    AddControl(page, CreateWindowExW(
+                         0, L"BUTTON", L"Exclude from screen capture",
+                         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 142, 300, 22,
+                         hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdCaptureExclusion)),
+                         instance_, nullptr));
+    AddControl(page,
+               MakeLabel(hwnd_, instance_,
+                         L"Enhanced fullscreen is reserved and is not available in this build.", 16,
+                         176, 420, 18));
 }
 
 void SettingsWindow::BuildTilesPage()
 {
     const int page = kPageTiles;
-    const std::array<const wchar_t*, 6> tileNames{L"CPU", L"RAM", L"GPU", L"Network", L"Disk", L"Ping"};
+    const std::array<const wchar_t*, 6> tileNames{L"CPU",     L"RAM",  L"GPU",
+                                                  L"Network", L"Disk", L"Ping"};
     const std::array<const wchar_t*, 5> headers{L"Visible", L"Primary", L"Secondary", L"Tertiary",
                                                 L"Graph"};
     const int columnX[5] = {80, 160, 236, 312, 388};
@@ -517,11 +535,11 @@ void SettingsWindow::BuildTilesPage()
         const int y = 82 + t * 26;
         AddControl(page, MakeLabel(hwnd_, instance_, tileNames[t], 16, y, 60));
 
-        const auto makeCheck = [&](int id, int x, const wchar_t* text)
-        {
+        const auto makeCheck = [&](int id, int x, const wchar_t* text) {
             HWND box = CreateWindowExW(
                 0, L"BUTTON", text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, x, y - 2,
-                76, 22, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance_, nullptr);
+                76, 22, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance_,
+                nullptr);
             AddControl(page, box);
         };
         makeCheck(kIdTileVisibleBase + t, columnX[0], L"");
@@ -551,70 +569,67 @@ void SettingsWindow::BuildSensorsPage()
         HWND combo = CreateWindowExW(
             0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWN | WS_VSCROLL,
             comboX, 41 + i * 28, 180, 200, hwnd_,
-            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdDeviceComboBase + i)), instance_, nullptr);
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdDeviceComboBase + i)), instance_,
+            nullptr);
         AddControl(page, combo);
         SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"auto"));
         (void)kinds;
     }
 
-    const std::array<const wchar_t*, 6> toggleNames{
-        L"CPU temperature", L"GPU temperature", L"Disk temperature",
-        L"Fan speed",       L"RAM temperature", L"Mainboard temperature"};
+    const std::array<const wchar_t*, 6> toggleNames{L"CPU temperature",  L"GPU temperature",
+                                                    L"Disk temperature", L"Fan speed",
+                                                    L"RAM temperature",  L"Mainboard temperature"};
     for (int i = 0; i < 6; ++i)
     {
-AddControl(page, CreateWindowExW(
-                              0, L"BUTTON", toggleNames[i],
+        AddControl(page, CreateWindowExW(
+                             0, L"BUTTON", toggleNames[i],
                              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 176 + i * 24,
                              300, 22, hwnd_,
                              reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdSensorToggleBase + i)),
                              instance_, nullptr));
     }
 
-    AddControl(page, CreateWindowExW(
-                          0, L"BUTTON",
-                          L"Deep sensors (temps/fans; requires PawnIO + elevation)",
-                          WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 176 + 6 * 24, 340,
-                          22, hwnd_,
-                          reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdDeepSensorsToggle)), instance_,
-                          nullptr));
+    AddControl(page,
+               CreateWindowExW(
+                   0, L"BUTTON", L"Deep sensors (temps/fans; requires PawnIO + elevation)",
+                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 176 + 6 * 24, 340, 22,
+                   hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdDeepSensorsToggle)),
+                   instance_, nullptr));
 
     AddControl(page, MakeLabel(hwnd_, instance_, L"Disk temp mode:", 340, 44, 130));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Fan mode:", 340, 72, 130));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Mainboard mode:", 340, 100, 130));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Ping target:", 340, 128, 130));
 
-    HWND diskTemp = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                                              CBS_DROPDOWNLIST | WS_VSCROLL, 340, 62,
-                                     170, 200, hwnd_,
-                                     reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdDiskTempCombo)),
-                                     instance_, nullptr);
+    HWND diskTemp = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        340, 62, 170, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdDiskTempCombo)),
+        instance_, nullptr);
     AddControl(page, diskTemp);
     SendMessageW(diskTemp, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Selected disk"));
     SendMessageW(diskTemp, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Highest"));
     SendMessageW(diskTemp, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Average"));
 
-    HWND fanMode = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                                             CBS_DROPDOWNLIST | WS_VSCROLL, 340, 90,
-                                   170, 200, hwnd_,
-                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdFanModeCombo)),
-                                   instance_, nullptr);
+    HWND fanMode = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        340, 90, 170, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdFanModeCombo)),
+        instance_, nullptr);
     AddControl(page, fanMode);
     SendMessageW(fanMode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Highest"));
     SendMessageW(fanMode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Average"));
 
-    HWND boardMode = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                                               CBS_DROPDOWNLIST | WS_VSCROLL, 340, 118,
-                                     170, 200, hwnd_,
-                                     reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdMainboardModeCombo)),
-                                     instance_, nullptr);
+    HWND boardMode = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        340, 118, 170, 200, hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdMainboardModeCombo)), instance_, nullptr);
     AddControl(page, boardMode);
     SendMessageW(boardMode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Highest"));
     SendMessageW(boardMode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Average"));
 
-    HWND ping = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER |
-                                                      ES_AUTOHSCROLL, 340, 146, 170, 22, hwnd_,
-                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdPingEdit)),
-                                 instance_, nullptr);
+    HWND ping = CreateWindowExW(
+        0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL, 340, 146,
+        170, 22, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdPingEdit)), instance_,
+        nullptr);
     AddControl(page, ping);
 }
 
@@ -622,15 +637,15 @@ void SettingsWindow::BuildHistoryPage()
 {
     const int page = kPageHistory;
     AddControl(page, MakeLabel(hwnd_, instance_, L"Retention (minutes):", 16, 48, 160));
-    HWND combo = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                                           CBS_DROPDOWNLIST | WS_VSCROLL, 180, 45, 140,
-                                 200, hwnd_,
-                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdRetentionCombo)),
-                                 instance_, nullptr);
+    HWND combo = CreateWindowExW(
+        0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        180, 45, 140, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdRetentionCombo)),
+        instance_, nullptr);
     AddControl(page, combo);
     for (const int value : kRetentionOptions)
     {
-        SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(std::to_wstring(value).c_str()));
+        SendMessageW(combo, CB_ADDSTRING, 0,
+                     reinterpret_cast<LPARAM>(std::to_wstring(value).c_str()));
     }
 }
 
@@ -639,21 +654,28 @@ void SettingsWindow::BuildHotkeysPage()
     const int page = kPageHotkeys;
     AddControl(page, MakeLabel(hwnd_, instance_, L"Toggle overlay:", 16, 56, 160));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Toggle click-through:", 16, 96, 160));
+    AddControl(page, MakeLabel(hwnd_, instance_, L"Cycle view:", 16, 136, 160));
+    AddControl(page, MakeLabel(hwnd_, instance_, L"Toggle background:", 16, 176, 160));
     AddControl(page, MakeLabel(hwnd_, instance_,
                                L"Click the box, then press a key combination. Delete clears it.",
-                               16, 132, 440, 20));
+                               16, 212, 440, 20));
 
-    HWND overlayKey = CreateWindowExW(0, kHotkeyClassName, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                                      190, 52, 160, 24, hwnd_,
-                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdOverlayHotkey)),
-                                      instance_, nullptr);
+    HWND overlayKey = CreateWindowExW(
+        0, kHotkeyClassName, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP, 190, 52, 160, 24, hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdOverlayHotkey)), instance_, nullptr);
     AddControl(page, overlayKey);
-    HWND clickKey = CreateWindowExW(0, kHotkeyClassName, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                                    190, 92, 160, 24, hwnd_,
-                                    reinterpret_cast<HMENU>(
-                                        static_cast<INT_PTR>(kIdClickThroughHotkey)),
-                                    instance_, nullptr);
+    HWND clickKey = CreateWindowExW(
+        0, kHotkeyClassName, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP, 190, 92, 160, 24, hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdClickThroughHotkey)), instance_, nullptr);
     AddControl(page, clickKey);
+    HWND cycleKey = CreateWindowExW(
+        0, kHotkeyClassName, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP, 190, 132, 160, 24, hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdCycleViewHotkey)), instance_, nullptr);
+    AddControl(page, cycleKey);
+    HWND backgroundKey = CreateWindowExW(
+        0, kHotkeyClassName, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP, 190, 172, 160, 24, hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBackgroundHotkey)), instance_, nullptr);
+    AddControl(page, backgroundKey);
 }
 
 void SettingsWindow::BuildAboutPage()
@@ -663,14 +685,14 @@ void SettingsWindow::BuildAboutPage()
                                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | ES_MULTILINE |
                                     ES_READONLY | ES_AUTOVSCROLL,
                                 16, 44, 460, 250, hwnd_,
-                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdAboutText)), instance_,
-                                nullptr);
+                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdAboutText)),
+                                instance_, nullptr);
     AddControl(page, text);
-    AddControl(page, CreateWindowExW(0, L"BUTTON", L"Copy info",
-                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 16, 304, 110,
-                                     26, hwnd_,
-                                     reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdCopyInfo)),
-                                     instance_, nullptr));
+    AddControl(page,
+               CreateWindowExW(0, L"BUTTON", L"Copy info",
+                               WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 16, 304, 110, 26,
+                               hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdCopyInfo)),
+                               instance_, nullptr));
 }
 
 void SettingsWindow::ShowPage(int index)
@@ -699,16 +721,14 @@ void SettingsWindow::RefreshFromConfig()
     }
     loading_ = true;
 
-    const auto setCombo = [this](int id, int selection)
-    {
+    const auto setCombo = [this](int id, int selection) {
         HWND combo = GetDlgItem(hwnd_, id);
         if (combo != nullptr)
         {
             SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(selection), 0);
         }
     };
-    const auto setCheck = [this](int id, bool checked)
-    {
+    const auto setCheck = [this](int id, bool checked) {
         HWND box = GetDlgItem(hwnd_, id);
         if (box != nullptr)
         {
@@ -719,6 +739,8 @@ void SettingsWindow::RefreshFromConfig()
     setCombo(kIdRefreshCombo, binding_->RefreshIndex());
     setCombo(kIdThemeCombo, binding_->ThemeIndex());
     setCombo(kIdLayoutCombo, binding_->LayoutIndex());
+    setCombo(kIdViewCombo, binding_->ViewIndex());
+    setCheck(kIdTransparentBackground, binding_->TransparentBackground());
     setCheck(kIdStartWindows, binding_->StartWithWindows());
     setCheck(kIdStartHidden, binding_->StartHidden());
 
@@ -742,14 +764,16 @@ void SettingsWindow::RefreshFromConfig()
         setCheck(kIdTileTertiaryBase + t, binding_->TileFlag(t, TileField::Tertiary));
         setCheck(kIdTileGraphBase + t, binding_->TileFlag(t, TileField::Visualization));
         setCheck(kIdTileMiniBase + t, binding_->TileFlag(t, TileField::MiniSparkline));
-        setCheck(kIdTileVisComboBase + t,
-                 binding_->TileVisualizationIndex(t) == static_cast<int>(OptionIndex(
-                                                        kVisualizationOptions, Visualization::Sparklines)));
+        setCheck(
+            kIdTileVisComboBase + t,
+            binding_->TileVisualizationIndex(t) ==
+                static_cast<int>(OptionIndex(kVisualizationOptions, Visualization::Sparklines)));
     }
 
     const std::array<SensorToggle, 6> toggles{
-        SensorToggle::CpuTemperature, SensorToggle::GpuTemperature, SensorToggle::DiskTemperature,
-        SensorToggle::FanSpeed,       SensorToggle::RamTemperature,  SensorToggle::MainboardTemperature};
+        SensorToggle::CpuTemperature,  SensorToggle::GpuTemperature,
+        SensorToggle::DiskTemperature, SensorToggle::FanSpeed,
+        SensorToggle::RamTemperature,  SensorToggle::MainboardTemperature};
     for (int i = 0; i < 6; ++i)
     {
         setCheck(kIdSensorToggleBase + i, binding_->SensorEnabled(toggles[i]));
@@ -786,6 +810,15 @@ void SettingsWindow::RefreshFromConfig()
     {
         SetWindowTextW(clickKey,
                        FormatHotkeyForDisplay(binding_->ToggleClickThroughHotkey()).c_str());
+    }
+    if (HWND cycleKey = GetDlgItem(hwnd_, kIdCycleViewHotkey))
+    {
+        SetWindowTextW(cycleKey, FormatHotkeyForDisplay(binding_->CycleViewHotkey()).c_str());
+    }
+    if (HWND backgroundKey = GetDlgItem(hwnd_, kIdBackgroundHotkey))
+    {
+        SetWindowTextW(backgroundKey,
+                       FormatHotkeyForDisplay(binding_->ToggleBackgroundHotkey()).c_str());
     }
 
     if (HWND about = GetDlgItem(hwnd_, kIdAboutText))
@@ -840,7 +873,8 @@ void SettingsWindow::OnHotkeyCaptured(int controlId)
     {
         if (!binding_->SetToggleOverlayHotkey(captured))
         {
-            SetWindowTextW(control, FormatHotkeyForDisplay(binding_->ToggleOverlayHotkey()).c_str());
+            SetWindowTextW(control,
+                           FormatHotkeyForDisplay(binding_->ToggleOverlayHotkey()).c_str());
         }
     }
     else if (controlId == kIdClickThroughHotkey)
@@ -849,6 +883,21 @@ void SettingsWindow::OnHotkeyCaptured(int controlId)
         {
             SetWindowTextW(control,
                            FormatHotkeyForDisplay(binding_->ToggleClickThroughHotkey()).c_str());
+        }
+    }
+    else if (controlId == kIdCycleViewHotkey)
+    {
+        if (!binding_->SetCycleViewHotkey(captured))
+        {
+            SetWindowTextW(control, FormatHotkeyForDisplay(binding_->CycleViewHotkey()).c_str());
+        }
+    }
+    else if (controlId == kIdBackgroundHotkey)
+    {
+        if (!binding_->SetToggleBackgroundHotkey(captured))
+        {
+            SetWindowTextW(control,
+                           FormatHotkeyForDisplay(binding_->ToggleBackgroundHotkey()).c_str());
         }
     }
 }
@@ -860,14 +909,12 @@ void SettingsWindow::OnCommand(int controlId, int notifyCode, HWND /*control*/)
         return;
     }
 
-    const auto comboSelection = [this](int id) -> int
-    {
+    const auto comboSelection = [this](int id) -> int {
         HWND combo = GetDlgItem(hwnd_, id);
         const LRESULT result = combo != nullptr ? SendMessageW(combo, CB_GETCURSEL, 0, 0) : CB_ERR;
         return result == CB_ERR ? 0 : static_cast<int>(result);
     };
-    const auto isChecked = [this](int id) -> bool
-    {
+    const auto isChecked = [this](int id) -> bool {
         HWND box = GetDlgItem(hwnd_, id);
         return box != nullptr && SendMessageW(box, BM_GETCHECK, 0, 0) == BST_CHECKED;
     };
@@ -882,8 +929,7 @@ void SettingsWindow::OnCommand(int controlId, int notifyCode, HWND /*control*/)
     case kIdClose:
         ShowWindow(hwnd_, SW_HIDE);
         return;
-    case kIdCopyInfo:
-    {
+    case kIdCopyInfo: {
         if (!OpenClipboard(hwnd_))
         {
             return;
@@ -928,6 +974,9 @@ void SettingsWindow::OnCommand(int controlId, int notifyCode, HWND /*control*/)
     case kIdCaptureExclusion:
         binding_->SetCaptureExclusion(isChecked(kIdCaptureExclusion));
         return;
+    case kIdTransparentBackground:
+        binding_->SetTransparentBackground(isChecked(kIdTransparentBackground));
+        return;
     default:
         break;
     }
@@ -945,6 +994,11 @@ void SettingsWindow::OnCommand(int controlId, int notifyCode, HWND /*control*/)
     if (controlId == kIdLayoutCombo && notifyCode == CBN_SELCHANGE)
     {
         binding_->SetLayoutIndex(comboSelection(kIdLayoutCombo));
+        return;
+    }
+    if (controlId == kIdViewCombo && notifyCode == CBN_SELCHANGE)
+    {
+        binding_->SetViewIndex(comboSelection(kIdViewCombo));
         return;
     }
     if (controlId == kIdModeCombo && notifyCode == CBN_SELCHANGE)
@@ -1006,9 +1060,9 @@ void SettingsWindow::OnCommand(int controlId, int notifyCode, HWND /*control*/)
     {
         const int index = controlId - kIdSensorToggleBase;
         const std::array<SensorToggle, 6> toggles{
-            SensorToggle::CpuTemperature, SensorToggle::GpuTemperature,
+            SensorToggle::CpuTemperature,  SensorToggle::GpuTemperature,
             SensorToggle::DiskTemperature, SensorToggle::FanSpeed,
-            SensorToggle::RamTemperature, SensorToggle::MainboardTemperature};
+            SensorToggle::RamTemperature,  SensorToggle::MainboardTemperature};
         binding_->SetSensorEnabled(toggles[index], isChecked(controlId));
         return;
     }
@@ -1059,15 +1113,15 @@ void SettingsWindow::OnCommand(int controlId, int notifyCode, HWND /*control*/)
     {
         binding_->SetTileVisualizationIndex(
             static_cast<std::size_t>(controlId - kIdTileVisComboBase),
-            isChecked(controlId) ? static_cast<int>(OptionIndex(kVisualizationOptions,
-                                                                Visualization::Sparklines))
-                                 : static_cast<int>(OptionIndex(kVisualizationOptions,
-                                                                Visualization::Gauges)));
+            isChecked(controlId)
+                ? static_cast<int>(OptionIndex(kVisualizationOptions, Visualization::Sparklines))
+                : static_cast<int>(OptionIndex(kVisualizationOptions, Visualization::Gauges)));
         return;
     }
 }
 
-LRESULT CALLBACK SettingsWindow::StaticWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK SettingsWindow::StaticWndProc(HWND hwnd, UINT message, WPARAM wParam,
+                                               LPARAM lParam)
 {
     SettingsWindow* self = nullptr;
     if (message == WM_NCCREATE)
@@ -1095,8 +1149,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LP
 {
     switch (message)
     {
-    case WM_GETMINMAXINFO:
-    {
+    case WM_GETMINMAXINFO: {
         auto* info = reinterpret_cast<MINMAXINFO*>(lParam);
         info->ptMinTrackSize.x = 480;
         info->ptMinTrackSize.y = 420;
@@ -1111,8 +1164,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LP
                          std::max(height - kBottomStrip - 16, 0), SWP_NOZORDER);
             if (HWND reset = GetDlgItem(hwnd_, kIdReset))
             {
-                SetWindowPos(reset, nullptr, 8, height - 34, 0, 0,
-                             SWP_NOSIZE | SWP_NOZORDER);
+                SetWindowPos(reset, nullptr, 8, height - 34, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
             }
             if (HWND close = GetDlgItem(hwnd_, kIdClose))
             {
@@ -1121,8 +1173,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LP
             }
         }
         return 0;
-    case WM_COMMAND:
-    {
+    case WM_COMMAND: {
         const int controlId = LOWORD(wParam);
         const int notify = HIWORD(wParam);
         if (controlId == kIdTab && notify == 0)
@@ -1133,15 +1184,16 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LP
         return 0;
     }
     case WM_HSCROLL:
-        if (binding_ != nullptr && reinterpret_cast<HWND>(lParam) == GetDlgItem(hwnd_, kIdOpacitySlider))
+        if (binding_ != nullptr &&
+            reinterpret_cast<HWND>(lParam) == GetDlgItem(hwnd_, kIdOpacitySlider))
         {
-            const LRESULT position = SendMessageW(GetDlgItem(hwnd_, kIdOpacitySlider), TBM_GETPOS, 0, 0);
+            const LRESULT position =
+                SendMessageW(GetDlgItem(hwnd_, kIdOpacitySlider), TBM_GETPOS, 0, 0);
             binding_->SetOpacity(static_cast<double>(position) / 100.0);
             return 0;
         }
         break;
-    case WM_NOTIFY:
-    {
+    case WM_NOTIFY: {
         auto* header = reinterpret_cast<NMHDR*>(lParam);
         if (header != nullptr && header->code == TCN_SELCHANGE && header->hwndFrom == tab_)
         {

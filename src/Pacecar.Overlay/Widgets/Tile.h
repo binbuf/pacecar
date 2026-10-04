@@ -30,6 +30,9 @@ struct TileContent
     std::span<const float> sparkSamples{};
     float sparkMin = 0.0f;
     float sparkMax = 100.0f;
+    // Draw a drop shadow behind the text so values stay legible when the panel background is off
+    // and the overlay floats over arbitrary desktop/game content.
+    bool shadow = false;
 };
 
 class Tile
@@ -45,5 +48,6 @@ class Tile
     CachedBrush labelBrush_;
     CachedBrush primaryBrush_;
     CachedBrush secondaryBrush_;
+    CachedBrush shadowBrush_;
 };
 } // namespace pacecar::overlay

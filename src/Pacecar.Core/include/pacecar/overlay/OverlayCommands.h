@@ -27,21 +27,39 @@ enum class OverlayCommand : std::uint16_t
     About = 9,
     // Opt-in FPS / frame-time capture (task T17). Tray/context action; never runs by default.
     ToggleFrameCapture = 10,
+    // Cycles the presentation view (Full -> Large visuals -> Small text -> FPS only).
+    CycleView = 11,
+    // Toggles the panel background so the overlay can read as plain text over the desktop/game.
+    ToggleBackground = 12,
 };
 
-// Overlay right-click menu items in display order. The menu command id is the underlying enum value.
-inline constexpr std::array<OverlayCommand, 7> kContextMenuCommands{
-    OverlayCommand::Mode,     OverlayCommand::Settings, OverlayCommand::History,
-    OverlayCommand::Specs,    OverlayCommand::ToggleFrameCapture, OverlayCommand::Hide,
+// Overlay right-click menu items in display order. The menu command id is the underlying enum
+// value.
+inline constexpr std::array<OverlayCommand, 9> kContextMenuCommands{
+    OverlayCommand::CycleView,
+    OverlayCommand::ToggleBackground,
+    OverlayCommand::Mode,
+    OverlayCommand::Settings,
+    OverlayCommand::History,
+    OverlayCommand::Specs,
+    OverlayCommand::ToggleFrameCapture,
+    OverlayCommand::Hide,
     OverlayCommand::Exit,
 };
 
-// Tray menu items in display order: Show/Hide, Mode, Settings, History, FPS capture, Copy system
-// info, About, Exit (design ref 04-ui-ux.md "Tray").
-inline constexpr std::array<OverlayCommand, 8> kTrayMenuCommands{
-    OverlayCommand::ToggleVisibility, OverlayCommand::Mode,     OverlayCommand::Settings,
-    OverlayCommand::History,          OverlayCommand::ToggleFrameCapture,
-    OverlayCommand::CopySystemInfo,   OverlayCommand::About,    OverlayCommand::Exit,
+// Tray menu items in display order: Show/Hide, Cycle view, Toggle background, Mode, Settings,
+// History, FPS capture, Copy system info, About, Exit (design ref 04-ui-ux.md "Tray").
+inline constexpr std::array<OverlayCommand, 10> kTrayMenuCommands{
+    OverlayCommand::ToggleVisibility,
+    OverlayCommand::CycleView,
+    OverlayCommand::ToggleBackground,
+    OverlayCommand::Mode,
+    OverlayCommand::Settings,
+    OverlayCommand::History,
+    OverlayCommand::ToggleFrameCapture,
+    OverlayCommand::CopySystemInfo,
+    OverlayCommand::About,
+    OverlayCommand::Exit,
 };
 
 // The display label for a command (stable static storage).
@@ -69,6 +87,10 @@ inline constexpr std::array<OverlayCommand, 8> kTrayMenuCommands{
         return L"About";
     case OverlayCommand::ToggleFrameCapture:
         return L"FPS capture";
+    case OverlayCommand::CycleView:
+        return L"Cycle view";
+    case OverlayCommand::ToggleBackground:
+        return L"Background";
     case OverlayCommand::None:
     default:
         return L"";
@@ -79,6 +101,6 @@ inline constexpr std::array<OverlayCommand, 8> kTrayMenuCommands{
 [[nodiscard]] inline bool IsOverlayCommand(unsigned id) noexcept
 {
     return id >= static_cast<unsigned>(OverlayCommand::Mode) &&
-           id <= static_cast<unsigned>(OverlayCommand::ToggleFrameCapture);
+           id <= static_cast<unsigned>(OverlayCommand::ToggleBackground);
 }
 } // namespace pacecar::overlay

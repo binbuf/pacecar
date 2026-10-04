@@ -27,16 +27,19 @@ struct DemoTile
 
 const DemoTile& DemoFor(TileId id) noexcept
 {
-    static constexpr DemoTile kCpu{L"--%", L"-- GHz", L"--\x00B0"
-                                             L"C",
+    static constexpr DemoTile kCpu{L"--%", L"-- GHz",
+                                   L"--\x00B0"
+                                   L"C",
                                    0.0};
     static constexpr DemoTile kRam{L"--%", L"-- / -- GB", L"", 0.0};
-    static constexpr DemoTile kGpu{L"--%", L"--\x00B0"
-                                            L"C",
+    static constexpr DemoTile kGpu{L"--%",
+                                   L"--\x00B0"
+                                   L"C",
                                    L"-- / -- GB", 0.0};
     static constexpr DemoTile kNetwork{L"-- /s", L"\x2191 --  \x2193 --", L"", 0.0};
-    static constexpr DemoTile kDisk{L"-- /s", L"R: --  W: --", L"--\x00B0"
-                                                               L"C",
+    static constexpr DemoTile kDisk{L"-- /s", L"R: --  W: --",
+                                    L"--\x00B0"
+                                    L"C",
                                     0.0};
     static constexpr DemoTile kPing{L"-- ms", L"", L"", 0.0};
     static constexpr DemoTile kFans{L"-- RPM", L"", L"", 0.0};
@@ -180,12 +183,28 @@ void WidgetScene::EnsureInitialized(ID2D1RenderTarget* target)
     primary.align = TextAlign::Center;
     styles_.primary = text_.RegisterFormat(primary);
 
+    TextStyle primarySmall = primary;
+    primarySmall.sizeDip = 13.0f;
+    styles_.primarySmall = text_.RegisterFormat(primarySmall);
+
+    TextStyle primaryLarge = primary;
+    primaryLarge.sizeDip = 24.0f;
+    styles_.primaryLarge = text_.RegisterFormat(primaryLarge);
+
+    TextStyle primaryXl = primary;
+    primaryXl.sizeDip = 32.0f;
+    styles_.primaryXl = text_.RegisterFormat(primaryXl);
+
     TextStyle secondary{};
     secondary.family = L"Consolas";
     secondary.sizeDip = 9.0f;
     secondary.weight = 400;
     secondary.tabular = true;
     styles_.secondary = text_.RegisterFormat(secondary);
+
+    TextStyle secondaryLarge = secondary;
+    secondaryLarge.sizeDip = 11.0f;
+    styles_.secondaryLarge = text_.RegisterFormat(secondaryLarge);
 
     for (std::size_t i = 0; i < demoHistory_.size(); ++i)
     {
@@ -212,30 +231,59 @@ void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
     }
 
     const RectF bounds{0.0f, 0.0f, size.width, size.height};
-    panel_.Draw(target, bounds, kCornerRadius, theme.palette.panelBackground,
-                theme.palette.panelBorder);
+    if (settings_.drawBackground)
+    {
+        panel_.Draw(target, bounds, kCornerRadius, theme.palette.panelBackground,
+                    theme.palette.panelBorder);
+    }
 
-    const RectF headerRect{settings_.panelPadding, settings_.panelPadding,
-                           size.width - settings_.panelPadding,
-                           settings_.panelPadding + settings_.headerHeight};
     const bool haveFrame = frame_ && frame_->snapshot;
     // The FPS tile is drawn only while a capture is actually producing frames, and disappears
-    // again as soon as the capture stops (T17). Config cannot leave it visible otherwise.
-    const bool captureActive =
-        haveFrame && !Unavailable(frame_->snapshot->frame.status) &&
-        frame_->snapshot->frame.fps > 0.0;
-    SetFrameCaptureTileVisible(settings_, captureActive);
+    // again as soon as the capture stops (T17). Config cannot leave it visible otherwise. The
+    // FPS-only view always shows the readout (with a placeholder when no capture is running).
+    const bool captureActive = haveFrame && !Unavailable(frame_->snapshot->frame.status) &&
+                               frame_->snapshot->frame.fps > 0.0;
+    if (settings_.view != pacecar::ViewMode::FpsOnly)
+    {
+        SetFrameCaptureTileVisible(settings_, captureActive);
+    }
 
-    const wchar_t* status = L"Live";
-    if (captureActive)
+    if (settings_.drawHeader)
     {
-        status = L"FPS capture";
+        const RectF headerRect{settings_.panelPadding, settings_.panelPadding,
+                               size.width - settings_.panelPadding,
+                               settings_.panelPadding + settings_.headerHeight};
+        const wchar_t* status = L"Live";
+        if (captureActive)
+        {
+            status = L"FPS capture";
+        }
+        else if (haveFrame && !frame_->snapshot->deepSensors.available)
+        {
+            status = L"Deep sensors off";
+        }
+        header_.Draw(target, text_, styles_, headerRect, L"PACECAR", status, theme);
     }
-    else if (haveFrame && !frame_->snapshot->deepSensors.available)
+
+    // Pick density-appropriate value styles for the active view.
+    WidgetStyles viewStyles = styles_;
+    switch (settings_.view)
     {
-        status = L"Deep sensors off";
+    case pacecar::ViewMode::LargeVisuals:
+        viewStyles.primary = styles_.primaryLarge;
+        viewStyles.secondary = styles_.secondaryLarge;
+        break;
+    case pacecar::ViewMode::SmallText:
+        viewStyles.primary = styles_.primarySmall;
+        break;
+    case pacecar::ViewMode::FpsOnly:
+        viewStyles.primary = styles_.primaryXl;
+        viewStyles.secondary = styles_.secondaryLarge;
+        break;
+    case pacecar::ViewMode::Full:
+    default:
+        break;
     }
-    header_.Draw(target, text_, styles_, headerRect, L"PACECAR", status, theme);
 
     const LayoutResult layout = ComputeLayout(size.width, size.height, settings_);
     const bool live = frame_ && frame_->snapshot;
@@ -243,17 +291,18 @@ void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
     {
         if (live)
         {
-            DrawLiveTile(target, layout.tiles[i], i, theme);
+            DrawLiveTile(target, layout.tiles[i], i, viewStyles, theme);
         }
         else
         {
-            DrawDemoTile(target, layout.tiles[i], i, theme);
+            DrawDemoTile(target, layout.tiles[i], i, viewStyles, theme);
         }
     }
 }
 
 void WidgetScene::DrawDemoTile(ID2D1RenderTarget* target, const TilePlacement& placement,
-                               std::size_t index, const ResolvedTheme& theme)
+                               std::size_t index, const WidgetStyles& styles,
+                               const ResolvedTheme& theme)
 {
     const DemoTile& demo = DemoFor(placement.id);
 
@@ -264,16 +313,19 @@ void WidgetScene::DrawDemoTile(ID2D1RenderTarget* target, const TilePlacement& p
     content.secondary = demo.secondary;
     content.tertiary = demo.tertiary;
     content.gaugeFraction = demo.gauge;
-    content.visualizationIsSparkline = placement.visualization == pacecar::Visualization::Sparklines;
+    content.visualizationIsSparkline =
+        placement.visualization == pacecar::Visualization::Sparklines;
     content.sparkSamples = std::span<const float>(demoHistory_);
     content.sparkMin = 0.0f;
     content.sparkMax = 100.0f;
+    content.shadow = !settings_.drawBackground;
 
-    tiles_[index].Draw(target, text_, styles_, placement.bounds, content, placement.fields, theme);
+    tiles_[index].Draw(target, text_, styles, placement.bounds, content, placement.fields, theme);
 }
 
 void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& placement,
-                               std::size_t index, const ResolvedTheme& theme)
+                               std::size_t index, const WidgetStyles& styles,
+                               const ResolvedTheme& theme)
 {
     const pacecar::metrics::MetricsSnapshot& snapshot = *frame_->snapshot;
     auto& primary = primaryBuffers_[index];
@@ -291,13 +343,13 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
 
     switch (placement.id)
     {
-    case TileId::Cpu:
-    {
+    case TileId::Cpu: {
         const double util = percent(snapshot.cpu.status, snapshot.cpu.totalUtilizationPercent);
         primaryView = pacecar::FormatPercent(primary, util);
         if (snapshot.cpu.totalFrequencyMhz > 0.0)
         {
-            secondaryView = pacecar::FormatFrequency(secondary, snapshot.cpu.totalFrequencyMhz * 1.0e6);
+            secondaryView =
+                pacecar::FormatFrequency(secondary, snapshot.cpu.totalFrequencyMhz * 1.0e6);
         }
         if (!Unavailable(snapshot.cpu.temperatureStatus) && snapshot.cpu.packageTemperatureC > 0.0)
         {
@@ -306,10 +358,9 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         gauge = util / 100.0;
         break;
     }
-    case TileId::Ram:
-    {
-        primaryView = pacecar::FormatPercent(primary, percent(snapshot.memory.status,
-                                                               snapshot.memory.usedPercent));
+    case TileId::Ram: {
+        primaryView = pacecar::FormatPercent(
+            primary, percent(snapshot.memory.status, snapshot.memory.usedPercent));
         wchar_t usedW[32]{};
         wchar_t totalW[32]{};
         static_cast<void>(pacecar::FormatBytes(usedW, snapshot.memory.usedBytes));
@@ -319,8 +370,7 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         gauge = percent(snapshot.memory.status, snapshot.memory.usedPercent) / 100.0;
         break;
     }
-    case TileId::Gpu:
-    {
+    case TileId::Gpu: {
         const double util = percent(snapshot.gpu.status, snapshot.gpu.utilizationPercent);
         primaryView = pacecar::FormatPercent(primary, util);
         if (!Unavailable(snapshot.gpu.temperatureStatus) && snapshot.gpu.temperatureC > 0.0)
@@ -339,11 +389,9 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         gauge = util / 100.0;
         break;
     }
-    case TileId::Network:
-    {
-        const double down = Unavailable(snapshot.network.status)
-                                ? 0.0
-                                : snapshot.network.downBytesPerSecond;
+    case TileId::Network: {
+        const double down =
+            Unavailable(snapshot.network.status) ? 0.0 : snapshot.network.downBytesPerSecond;
         primaryView = pacecar::FormatRate(primary, down);
         wchar_t upW[32]{};
         wchar_t downW[32]{};
@@ -352,11 +400,21 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         _snwprintf_s(secondary.data(), secondary.size(), _TRUNCATE, L"\x2191 %s  \x2193 %s", upW,
                      downW);
         secondaryView = std::wstring_view(secondary.data());
+        // Ping is folded into the network readout (the standalone Ping tile remains optional).
+        if (Unavailable(snapshot.ping.status))
+        {
+            tertiaryView = L"ping --";
+        }
+        else
+        {
+            _snwprintf_s(tertiary.data(), tertiary.size(), _TRUNCATE, L"ping %.0f ms",
+                         snapshot.ping.rttMs);
+            tertiaryView = std::wstring_view(tertiary.data());
+        }
         gaugeValid = false;
         break;
     }
-    case TileId::Disk:
-    {
+    case TileId::Disk: {
         const double read =
             Unavailable(snapshot.disk.status) ? 0.0 : snapshot.disk.readBytesPerSecond;
         const double write =
@@ -366,8 +424,7 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         wchar_t writeW[32]{};
         static_cast<void>(pacecar::FormatRate(readW, read));
         static_cast<void>(pacecar::FormatRate(writeW, write));
-        _snwprintf_s(secondary.data(), secondary.size(), _TRUNCATE, L"R: %s  W: %s", readW,
-                     writeW);
+        _snwprintf_s(secondary.data(), secondary.size(), _TRUNCATE, L"R: %s  W: %s", readW, writeW);
         secondaryView = std::wstring_view(secondary.data());
         if (!Unavailable(snapshot.disk.temperatureStatus) && snapshot.disk.temperatureC > 0.0)
         {
@@ -376,8 +433,7 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         gaugeValid = false;
         break;
     }
-    case TileId::Ping:
-    {
+    case TileId::Ping: {
         if (Unavailable(snapshot.ping.status))
         {
             primaryView = L"-- ms";
@@ -391,8 +447,7 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         gaugeValid = false;
         break;
     }
-    case TileId::Fps:
-    {
+    case TileId::Fps: {
         if (!Unavailable(snapshot.frame.status) && snapshot.frame.fps > 0.0)
         {
             _snwprintf_s(primary.data(), primary.size(), _TRUNCATE, L"%.0f FPS",
@@ -416,8 +471,7 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         }
         break;
     }
-    case TileId::Fans:
-    {
+    case TileId::Fans: {
         if (!Unavailable(snapshot.fan.status) && snapshot.fan.highestRpm > 0)
         {
             _snwprintf_s(primary.data(), primary.size(), _TRUNCATE, L"%d RPM",
@@ -432,8 +486,7 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         break;
     }
     case TileId::Mainboard:
-    default:
-    {
+    default: {
         if (!Unavailable(snapshot.board.status) && snapshot.board.mainboardTemperatureC > 0.0)
         {
             primaryView = pacecar::FormatTemperature(primary, snapshot.board.mainboardTemperatureC);
@@ -467,12 +520,14 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
     content.secondary = secondaryView;
     content.tertiary = tertiaryView;
     content.gaugeFraction = gaugeValid ? gauge : 0.0;
-    content.visualizationIsSparkline = placement.visualization == pacecar::Visualization::Sparklines;
+    content.visualizationIsSparkline =
+        placement.visualization == pacecar::Visualization::Sparklines;
     content.sparkSamples = sparkSamples;
     content.sparkMin = 0.0f;
     content.sparkMax = sparkMax;
+    content.shadow = !settings_.drawBackground;
 
-    tiles_[index].Draw(target, text_, styles_, placement.bounds, content, placement.fields, theme);
+    tiles_[index].Draw(target, text_, styles, placement.bounds, content, placement.fields, theme);
 }
 
 void WidgetScene::Trim()

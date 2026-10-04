@@ -25,11 +25,16 @@ std::size_t CollectVisible(const LayoutSettings& settings,
     return count;
 }
 
+float ContentTop(const LayoutSettings& settings) noexcept
+{
+    return settings.panelPadding +
+           (settings.drawHeader ? settings.headerHeight + settings.headerGap : 0.0f);
+}
+
 RectF ContentArea(float widthDip, float heightDip, const LayoutSettings& settings) noexcept
 {
-    return RectF{settings.panelPadding,
-                 settings.panelPadding + settings.headerHeight + settings.headerGap,
-                 widthDip - settings.panelPadding, heightDip - settings.panelPadding};
+    return RectF{settings.panelPadding, ContentTop(settings), widthDip - settings.panelPadding,
+                 heightDip - settings.panelPadding};
 }
 
 void FillPlacement(TilePlacement& placement, std::size_t index, const RectF& bounds,
@@ -62,9 +67,8 @@ void PlaceStretchedGrid(const RectF& area, const std::array<std::size_t, kMaxTil
                         const LayoutSettings& settings) noexcept
 {
     const int rows = (static_cast<int>(count) + columns - 1) / columns;
-    const float cellWidth =
-        (area.Width() - settings.tileGap * static_cast<float>(columns - 1)) /
-        static_cast<float>(columns);
+    const float cellWidth = (area.Width() - settings.tileGap * static_cast<float>(columns - 1)) /
+                            static_cast<float>(columns);
     const float cellHeight = (area.Height() - settings.tileGap * static_cast<float>(rows - 1)) /
                              static_cast<float>(rows);
     if (cellWidth <= 0.0f || cellHeight <= 0.0f)
@@ -148,7 +152,8 @@ void PlaceCustomGrid(const RectF& area, const std::array<std::size_t, kMaxTiles>
         const float top = area.top + tile.custom.top;
         const float right = area.left + tile.custom.right;
         const float bottom = area.top + tile.custom.bottom;
-        FillPlacement(result.tiles[result.count], ids[k], RectF{left, top, right, bottom}, settings);
+        FillPlacement(result.tiles[result.count], ids[k], RectF{left, top, right, bottom},
+                      settings);
         ++result.count;
         contentWidth = std::max(contentWidth, tile.custom.right);
         contentHeight = std::max(contentHeight, tile.custom.bottom);
@@ -173,9 +178,15 @@ bool TileIdFromConfigKey(std::string_view key, TileId& out) noexcept
     }
     const std::string_view normalized(buffer, length);
     constexpr std::array<std::pair<std::string_view, TileId>, 9> kKeys{{
-        {"cpu", TileId::Cpu},       {"ram", TileId::Ram},       {"gpu", TileId::Gpu},
-        {"network", TileId::Network}, {"disk", TileId::Disk},    {"ping", TileId::Ping},
-        {"fans", TileId::Fans},     {"mainboard", TileId::Mainboard}, {"fps", TileId::Fps},
+        {"cpu", TileId::Cpu},
+        {"ram", TileId::Ram},
+        {"gpu", TileId::Gpu},
+        {"network", TileId::Network},
+        {"disk", TileId::Disk},
+        {"ping", TileId::Ping},
+        {"fans", TileId::Fans},
+        {"mainboard", TileId::Mainboard},
+        {"fps", TileId::Fps},
     }};
     for (const auto& [name, id] : kKeys)
     {
@@ -256,10 +267,87 @@ void SetFrameCaptureTileVisible(LayoutSettings& settings, bool active) noexcept
     settings.tiles[static_cast<std::size_t>(TileId::Fps)].visible = active;
 }
 
+void ApplyViewMode(LayoutSettings& settings, pacecar::ViewMode view) noexcept
+{
+    settings.view = view;
+    switch (view)
+    {
+    case pacecar::ViewMode::LargeVisuals: {
+        // Bigger gauges/graphs with room for the value line inside the diagram. The chosen layout
+        // preset (3x3 vs 1x6) still decides the arrangement.
+        settings.tileMetrics.graphHeight = 72.0f;
+        settings.tileMetrics.primaryHeight = 26.0f;
+        settings.tileMetrics.lineHeight = 12.0f;
+        settings.tileMetrics.labelHeight = 11.0f;
+        settings.tileMetrics.minWidth = 96.0f;
+        settings.tileMetrics.padding = 7.0f;
+        settings.tileGap = 8.0f;
+        for (TileSettings& tile : settings.tiles)
+        {
+            if (!tile.visible)
+            {
+                continue;
+            }
+            tile.fields.visualization = true;
+            tile.fields.primary = true;
+        }
+        break;
+    }
+    case pacecar::ViewMode::SmallText: {
+        // Compact text readout: pack each metric as label + value + one detail line, no chrome.
+        settings.preset = pacecar::LayoutPreset::AutoFit;
+        settings.tileMetrics.labelHeight = 9.0f;
+        settings.tileMetrics.primaryHeight = 15.0f;
+        settings.tileMetrics.lineHeight = 10.0f;
+        settings.tileMetrics.minWidth = 54.0f;
+        settings.tileMetrics.padding = 4.0f;
+        settings.tileGap = 4.0f;
+        for (TileSettings& tile : settings.tiles)
+        {
+            tile.fields.label = true;
+            tile.fields.primary = true;
+            tile.fields.secondary = true;
+            tile.fields.tertiary = false;
+            tile.fields.visualization = false;
+            tile.fields.miniSparkline = false;
+        }
+        break;
+    }
+    case pacecar::ViewMode::FpsOnly: {
+        // Just the frame-time readout. Ignore the per-tile config: only FPS is shown.
+        settings.preset = pacecar::LayoutPreset::Compact3x3;
+        for (TileSettings& tile : settings.tiles)
+        {
+            tile.visible = false;
+        }
+        TileSettings& fps = settings.tiles[static_cast<std::size_t>(TileId::Fps)];
+        fps.visible = true;
+        fps.fields.label = false;
+        fps.fields.primary = true;
+        fps.fields.secondary = true;
+        fps.fields.tertiary = true;
+        fps.fields.visualization = false;
+        fps.fields.miniSparkline = false;
+        settings.tileMetrics.primaryHeight = 34.0f;
+        settings.tileMetrics.lineHeight = 16.0f;
+        settings.tileMetrics.labelHeight = 0.0f;
+        settings.tileMetrics.padding = 6.0f;
+        break;
+    }
+    case pacecar::ViewMode::Full:
+    default:
+        break;
+    }
+}
+
 LayoutSettings LayoutSettingsFromConfig(const pacecar::Config& config) noexcept
 {
     LayoutSettings settings = DefaultLayoutSettings();
     settings.preset = config.general.layout;
+    settings.drawBackground = !config.general.transparent_background;
+    settings.drawHeader =
+        settings.drawBackground && (config.general.view == pacecar::ViewMode::Full ||
+                                    config.general.view == pacecar::ViewMode::LargeVisuals);
 
     const std::array<std::pair<TileId, const pacecar::TileConfig*>, 7> source{{
         {TileId::Cpu, &config.tiles.cpu},
@@ -297,6 +385,8 @@ LayoutSettings LayoutSettingsFromConfig(const pacecar::Config& config) noexcept
                               static_cast<float>(placement.x + placement.width),
                               static_cast<float>(placement.y + placement.height)};
     }
+
+    ApplyViewMode(settings, config.general.view);
     return settings;
 }
 
@@ -305,8 +395,7 @@ TileSize MeasureLayout(const LayoutSettings& settings) noexcept
     std::array<std::size_t, kMaxTiles> ids{};
     const std::size_t count = CollectVisible(settings, ids);
     const float width = settings.panelPadding * 2.0f;
-    const float contentTop =
-        settings.panelPadding + settings.headerHeight + settings.headerGap;
+    const float contentTop = ContentTop(settings);
     if (count == 0)
     {
         return TileSize{width, contentTop + settings.panelPadding};
@@ -353,8 +442,7 @@ TileSize MeasureLayout(const LayoutSettings& settings) noexcept
     return TileSize{width + gridWidth, contentTop + gridHeight + settings.panelPadding};
 }
 
-LayoutResult ComputeLayout(float widthDip, float heightDip,
-                           const LayoutSettings& settings) noexcept
+LayoutResult ComputeLayout(float widthDip, float heightDip, const LayoutSettings& settings) noexcept
 {
     LayoutResult result{};
     result.preset = settings.preset;
@@ -380,32 +468,29 @@ LayoutResult ComputeLayout(float widthDip, float heightDip,
             float contentHeight = 0.0f;
             PlaceCustomGrid(result.content, ids, count, result, settings, contentWidth,
                             contentHeight);
-            result.content = RectF{result.content.left, result.content.top,
-                                   result.content.left + contentWidth,
-                                   result.content.top + contentHeight};
+            result.content =
+                RectF{result.content.left, result.content.top, result.content.left + contentWidth,
+                      result.content.top + contentHeight};
         }
         else
         {
             PlaceStretchedGrid(result.content, ids, count, kCompactColumns, result, settings);
         }
         break;
-    case pacecar::LayoutPreset::AutoFit:
-    {
+    case pacecar::LayoutPreset::AutoFit: {
         float gridWidth = 0.0f;
         float gridHeight = 0.0f;
-        PlaceNaturalGrid(result.content, ids, count, std::min(kCompactColumns,
-                                                              static_cast<int>(count)),
-                         result, settings, gridWidth, gridHeight);
+        PlaceNaturalGrid(result.content, ids, count,
+                         std::min(kCompactColumns, static_cast<int>(count)), result, settings,
+                         gridWidth, gridHeight);
         result.content = RectF{result.content.left, result.content.top,
-                               result.content.left + gridWidth,
-                               result.content.top + gridHeight};
+                               result.content.left + gridWidth, result.content.top + gridHeight};
         break;
     }
     case pacecar::LayoutPreset::Compact3x3:
     default:
-        PlaceStretchedGrid(result.content, ids, count, std::min(kCompactColumns,
-                                                                static_cast<int>(count)),
-                           result, settings);
+        PlaceStretchedGrid(result.content, ids, count,
+                           std::min(kCompactColumns, static_cast<int>(count)), result, settings);
         break;
     }
 

@@ -13,6 +13,7 @@
 namespace
 {
 using pacecar::LayoutPreset;
+using pacecar::ViewMode;
 using pacecar::overlay::ComputeLayout;
 using pacecar::overlay::DefaultLayoutSettings;
 using pacecar::overlay::IsOverlayCommand;
@@ -157,9 +158,8 @@ TEST(Layout, CustomGeometryIsHonored)
     for (std::size_t i = 0; i < 6; ++i)
     {
         settings.tiles[i].customValid = true;
-        settings.tiles[i].custom =
-            RectF{static_cast<float>(i) * 50.0f, 0.0f,
-                  static_cast<float>(i) * 50.0f + 40.0f, 30.0f};
+        settings.tiles[i].custom = RectF{static_cast<float>(i) * 50.0f, 0.0f,
+                                         static_cast<float>(i) * 50.0f + 40.0f, 30.0f};
     }
     const LayoutResult result = ComputeLayout(400.0f, 200.0f, settings);
 
@@ -280,12 +280,92 @@ TEST(Layout, SettingsFromConfigMapsTogglesAndGeometry)
     EXPECT_EQ(settings.tiles[6].visible, false); // reserved family stays hidden
 }
 
+TEST(Layout, FpsOnlyViewShowsOnlyFpsWithoutVisualization)
+{
+    pacecar::Config config = pacecar::Config::Defaults();
+    config.general.view = ViewMode::FpsOnly;
+    const LayoutSettings settings = LayoutSettingsFromConfig(config);
+
+    EXPECT_FALSE(settings.drawHeader);
+    const pacecar::overlay::TileSettings& fps =
+        settings.tiles[static_cast<std::size_t>(TileId::Fps)];
+    EXPECT_TRUE(fps.visible);
+    EXPECT_FALSE(fps.fields.visualization);
+    EXPECT_FALSE(settings.tiles[static_cast<std::size_t>(TileId::Cpu)].visible);
+
+    const LayoutResult result = ComputeLayout(kWidth, kHeight, settings);
+    ASSERT_EQ(result.count, 1u);
+    EXPECT_EQ(result.tiles[0].id, TileId::Fps);
+    ExpectNoOverlapAndContained(result, kWidth, kHeight);
+}
+
+TEST(Layout, SmallTextViewIsTextOnlyAndCompact)
+{
+    pacecar::Config config = pacecar::Config::Defaults();
+    config.general.view = ViewMode::SmallText;
+    const LayoutSettings settings = LayoutSettingsFromConfig(config);
+
+    EXPECT_FALSE(settings.drawHeader);
+    EXPECT_EQ(settings.preset, LayoutPreset::AutoFit);
+    for (std::size_t i = 0; i < kMaxTiles; ++i)
+    {
+        EXPECT_FALSE(settings.tiles[i].fields.visualization) << "tile " << i;
+        EXPECT_TRUE(settings.tiles[i].fields.primary) << "tile " << i;
+        EXPECT_FALSE(settings.tiles[i].fields.tertiary) << "tile " << i;
+    }
+
+    const LayoutResult result = ComputeLayout(kWidth, kHeight, settings);
+    ASSERT_EQ(result.count, 6u);
+    ExpectNoOverlapAndContained(result, kWidth, kHeight);
+}
+
+TEST(Layout, LargeVisualsViewForcesVisualizationAndKeepsHeader)
+{
+    pacecar::Config config = pacecar::Config::Defaults();
+    config.general.view = ViewMode::LargeVisuals;
+    config.tiles.cpu.show_visualization = false;
+    const LayoutSettings settings = LayoutSettingsFromConfig(config);
+
+    EXPECT_TRUE(settings.drawHeader);
+    EXPECT_TRUE(settings.drawBackground);
+    const pacecar::overlay::TileFieldVisibility& cpu =
+        settings.tiles[static_cast<std::size_t>(TileId::Cpu)].fields;
+    EXPECT_TRUE(cpu.visualization);
+    EXPECT_GT(settings.tileMetrics.graphHeight, pacecar::overlay::TileLayoutMetrics{}.graphHeight);
+
+    const LayoutResult result = ComputeLayout(kWidth, kHeight, settings);
+    ExpectNoOverlapAndContained(result, kWidth, kHeight);
+}
+
+TEST(Layout, TransparentBackgroundHidesPanelAndHeader)
+{
+    pacecar::Config config = pacecar::Config::Defaults();
+    config.general.transparent_background = true;
+    const LayoutSettings settings = LayoutSettingsFromConfig(config);
+
+    EXPECT_FALSE(settings.drawBackground);
+    EXPECT_FALSE(settings.drawHeader);
+
+    // Without the header the first tile starts higher than in the default (header) layout.
+    const LayoutSettings withHeader = LayoutSettingsFromConfig(pacecar::Config::Defaults());
+    const LayoutResult transparent = ComputeLayout(kWidth, kHeight, settings);
+    const LayoutResult headed = ComputeLayout(kWidth, kHeight, withHeader);
+    ASSERT_GT(transparent.count, 0u);
+    ASSERT_GT(headed.count, 0u);
+    EXPECT_LT(transparent.tiles[0].bounds.top, headed.tiles[0].bounds.top);
+}
+
 TEST(OverlayCommands, MenuExposesAllRequiredCommandsInOrder)
 {
-    const std::array<OverlayCommand, 7> expected{
-        OverlayCommand::Mode,  OverlayCommand::Settings, OverlayCommand::History,
-        OverlayCommand::Specs, OverlayCommand::ToggleFrameCapture, OverlayCommand::Hide,
-        OverlayCommand::Exit};
+    const std::array<OverlayCommand, 9> expected{OverlayCommand::CycleView,
+                                                 OverlayCommand::ToggleBackground,
+                                                 OverlayCommand::Mode,
+                                                 OverlayCommand::Settings,
+                                                 OverlayCommand::History,
+                                                 OverlayCommand::Specs,
+                                                 OverlayCommand::ToggleFrameCapture,
+                                                 OverlayCommand::Hide,
+                                                 OverlayCommand::Exit};
     EXPECT_EQ(kContextMenuCommands, expected);
     for (const OverlayCommand command : kContextMenuCommands)
     {

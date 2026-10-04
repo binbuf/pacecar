@@ -1,8 +1,8 @@
 // pacecar.cpp : Overlay host process.
 //
 // The app shell: command-line parse, config load, per-user single-instance guard, overlay window,
-// tray icon, global hotkeys, sampler (which owns the sensor-helper client), and the full shutdown path (debounced config
-// save on exit, WM_ENDSESSION, and console Ctrl+C).
+// tray icon, global hotkeys, sampler (which owns the sensor-helper client), and the full shutdown
+// path (debounced config save on exit, WM_ENDSESSION, and console Ctrl+C).
 //
 // Command line:
 //   --recipe=a|b        layered (default) or DirectComposition prototype
@@ -142,7 +142,8 @@ std::wstring Utf8ToWide(std::string_view text)
         return {};
     }
     std::wstring wide(static_cast<std::size_t>(length), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), wide.data(), length);
+    MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), wide.data(),
+                        length);
     return wide;
 }
 
@@ -214,8 +215,8 @@ void SyncStartWithWindows(const pacecar::Config& config)
         return;
     }
     std::wstring existing;
-    const bool present = pacecar::app::ReadStartupValue(
-        pacecar::app::kStartupRunKey, pacecar::app::kStartupValueName, existing);
+    const bool present = pacecar::app::ReadStartupValue(pacecar::app::kStartupRunKey,
+                                                        pacecar::app::kStartupValueName, existing);
     if (config.general.start_with_windows)
     {
         const std::wstring desired =
@@ -366,10 +367,8 @@ CommandLineOptions ParseCommandLine()
 }
 } // namespace
 
-int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
-                      _In_opt_ HINSTANCE hPrevInstance,
-                      _In_ LPWSTR lpCmdLine,
-                      _In_ int nCmdShow)
+int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
+                      _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
 {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
@@ -394,8 +393,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     // Tests inject a unique instance suffix; skip the HKCU Run sync so they never touch the real
     // per-user startup entry.
     const bool testMode = !commandLine.instanceSuffix.empty();
-    const auto logEvent = [&commandLine](std::wstring_view event)
-    { AppendLifecycleLog(commandLine.lifecycleLog, event); };
+    const auto logEvent = [&commandLine](std::wstring_view event) {
+        AppendLifecycleLog(commandLine.lifecycleLog, event);
+    };
 
     std::wstring instanceSuffix = commandLine.instanceSuffix;
     if (instanceSuffix.empty())
@@ -444,11 +444,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                                : config.overlay.mode == pacecar::OverlayMode::ClickThrough;
     options.captureExclusion = commandLine.captureExclusion && config.overlay.capture_exclusion;
     options.alwaysOnTop = config.overlay.always_on_top;
-    options.compositionClickThrough = commandLine.hitTest
-                                          ? pacecar::overlay::CompositionClickThrough::
-                                                HitTestTransparent
-                                          : pacecar::overlay::CompositionClickThrough::
-                                                TransparentExStyle;
+    options.compositionClickThrough =
+        commandLine.hitTest ? pacecar::overlay::CompositionClickThrough::HitTestTransparent
+                            : pacecar::overlay::CompositionClickThrough::TransparentExStyle;
     options.panelOpacity = config.general.opacity;
     options.theme = config.general.theme;
 
@@ -473,8 +471,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     // toggles) without recreating the window.
     overlay.ApplyConfig(config);
 
-    const auto saveConfig = [&config, &commandLine]
-    {
+    const auto saveConfig = [&config, &commandLine] {
         if (commandLine.configPath.empty())
         {
             static_cast<void>(config.Save());
@@ -486,26 +483,24 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     };
     pacecar::DebouncedSaver saver(saveConfig);
 
-    overlay.SetPositionChangedCallback(
-        [&config, &saver](const pacecar::MonitorRect& rect)
+    overlay.SetPositionChangedCallback([&config, &saver](const pacecar::MonitorRect& rect) {
+        bool replaced = false;
+        for (pacecar::MonitorRect& existing : config.overlay.monitor_rects)
         {
-            bool replaced = false;
-            for (pacecar::MonitorRect& existing : config.overlay.monitor_rects)
+            if (existing.monitor_id == rect.monitor_id)
             {
-                if (existing.monitor_id == rect.monitor_id)
-                {
-                    existing = rect;
-                    replaced = true;
-                    break;
-                }
+                existing = rect;
+                replaced = true;
+                break;
             }
-            if (!replaced)
-            {
-                config.overlay.monitor_rects.push_back(rect);
-            }
-            config.overlay.monitor_id = rect.monitor_id;
-            saver.Touch();
-        });
+        }
+        if (!replaced)
+        {
+            config.overlay.monitor_rects.push_back(rect);
+        }
+        config.overlay.monitor_id = rect.monitor_id;
+        saver.Touch();
+    });
     overlay.SetSessionEndingCallback([&saveConfig] { saveConfig(); });
 
     pacecar::overlay::Sampler sampler;
@@ -530,21 +525,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     pacecar::overlay::SpecsWindow specsWindow;
     pacecar::overlay::HistoryWindow historyWindow;
 
-    const auto refreshShellFlags = [&overlay, &tray, trayCreated]
-    {
+    const auto refreshShellFlags = [&overlay, &tray, &config, trayCreated] {
         if (trayCreated)
         {
             tray.SetVisibleFlag(overlay.IsVisible());
             tray.SetClickThroughFlag(overlay.ClickThrough());
+            tray.SetBackgroundFlag(config.general.transparent_background);
         }
     };
 
     // On-demand helper lifecycle shared by deep sensors and FPS capture: the elevated helper is
-// launched (single UAC prompt) when either feature is on and terminated when both are off. The
-// protocol is unchanged - only the launch is a shell concern.
+    // launched (single UAC prompt) when either feature is on and terminated when both are off. The
+    // protocol is unchanged - only the launch is a shell concern.
     const auto updateHelperLifecycle = [&sampler, &helperLauncher, &deepSensorsActive,
-                                        &frameCaptureActive](const wchar_t* reason)
-    {
+                                        &frameCaptureActive](const wchar_t* reason) {
         const bool needed = deepSensorsActive || frameCaptureActive;
         if (needed)
         {
@@ -564,8 +558,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         }
     };
 
-    const auto applyDeepSensors = [&sampler, &deepSensorsActive, &updateHelperLifecycle](bool enabled)
-    {
+    const auto applyDeepSensors = [&sampler, &deepSensorsActive,
+                                   &updateHelperLifecycle](bool enabled) {
         if (enabled == deepSensorsActive)
         {
             return;
@@ -578,8 +572,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     // Opt-in FPS / frame-time capture (task T17): the sampler asks the helper to start/stop an ETW
     // session for the foreground PID. Never enabled by default; the helper is launched on demand.
     const auto applyFrameCapture = [&sampler, &frameCaptureActive, &updateHelperLifecycle,
-                                    &logEvent](bool enabled)
-    {
+                                    &logEvent](bool enabled) {
         if (enabled == frameCaptureActive)
         {
             return;
@@ -597,9 +590,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     if (shellMode)
     {
         static_cast<void>(singleInstance.CreateActivationWindow(
-            hInstance,
-            [&overlay, &logEvent, &refreshShellFlags]
-            {
+            hInstance, [&overlay, &logEvent, &refreshShellFlags] {
                 overlay.SetVisible(true);
                 refreshShellFlags();
                 logEvent(L"activation");
@@ -610,8 +601,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
             SyncStartWithWindows(config);
         }
 
-        const auto aboutText = [&overlay, &sampler]
-        {
+        const auto aboutText = [&overlay, &sampler] {
             std::wstring text = L"Version: " + Utf8ToWide(pacecar::CoreVersion()) + L"\n";
             text += L"Renderer: " + overlay.Diagnostics() + L"\n";
             text += L"Sampler: " + sampler.Diagnostics() + L"\n";
@@ -626,8 +616,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         // Live-apply every Settings edit: overlay appearance/behavior, sampler cadence, hotkey
         // re-registration, tray flags, and the debounced config write. No per-keystroke/per-drag
         // write happens here - `saver.Touch()` only arms the 500 ms debounce.
-        const auto applyConfigChanges = [&]
-        {
+        const auto applyConfigChanges = [&] {
             overlay.ApplyConfig(config);
             const auto refreshMs =
                 std::chrono::milliseconds(static_cast<int>(config.general.refresh));
@@ -651,9 +640,34 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                         pacecar::app::ParseHotkey(clickHotkey);
                     if (clickParse.ok())
                     {
+                        static_cast<void>(
+                            hotkeys.Register(pacecar::overlay::HotkeyManager::kToggleClickThroughId,
+                                             clickParse.binding));
+                    }
+                }
+                hotkeys.Unregister(pacecar::overlay::HotkeyManager::kCycleViewId);
+                const std::wstring cycleHotkey = Utf8ToWide(config.hotkeys.cycle_view);
+                if (!cycleHotkey.empty())
+                {
+                    const pacecar::app::HotkeyParseResult cycleParse =
+                        pacecar::app::ParseHotkey(cycleHotkey);
+                    if (cycleParse.ok())
+                    {
                         static_cast<void>(hotkeys.Register(
-                            pacecar::overlay::HotkeyManager::kToggleClickThroughId,
-                            clickParse.binding));
+                            pacecar::overlay::HotkeyManager::kCycleViewId, cycleParse.binding));
+                    }
+                }
+                hotkeys.Unregister(pacecar::overlay::HotkeyManager::kToggleBackgroundId);
+                const std::wstring backgroundHotkey = Utf8ToWide(config.hotkeys.toggle_background);
+                if (!backgroundHotkey.empty())
+                {
+                    const pacecar::app::HotkeyParseResult backgroundParse =
+                        pacecar::app::ParseHotkey(backgroundHotkey);
+                    if (backgroundParse.ok())
+                    {
+                        static_cast<void>(
+                            hotkeys.Register(pacecar::overlay::HotkeyManager::kToggleBackgroundId,
+                                             backgroundParse.binding));
                     }
                 }
             }
@@ -667,8 +681,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         settingsHooks.instance = hInstance;
         settingsHooks.config = &config;
         settingsHooks.onChanged = applyConfigChanges;
-        settingsHooks.onStartupSettingChanged = [&config, testMode]
-        {
+        settingsHooks.onStartupSettingChanged = [&config, testMode] {
             if (!testMode)
             {
                 SyncStartWithWindows(config);
@@ -678,11 +691,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
         const pacecar::overlay::HistoryWindow::SamplerAccess historyAccess =
             [&sampler](pacecar::metrics::MetricHistory& out) { return sampler.CopyHistory(out); };
-        const pacecar::overlay::HistoryWindow::SnapshotAccess snapshotAccess =
-            [&sampler]() { return sampler.LatestSnapshot(); };
+        const pacecar::overlay::HistoryWindow::SnapshotAccess snapshotAccess = [&sampler]() {
+            return sampler.LatestSnapshot();
+        };
 
-        const auto handleCommand = [&](pacecar::overlay::OverlayCommand command)
-        {
+        const auto handleCommand = [&](pacecar::overlay::OverlayCommand command) {
             switch (command)
             {
             case pacecar::overlay::OverlayCommand::ToggleVisibility:
@@ -700,8 +713,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
             case pacecar::overlay::OverlayCommand::Exit:
                 overlay.Quit();
                 break;
-            case pacecar::overlay::OverlayCommand::CopySystemInfo:
-            {
+            case pacecar::overlay::OverlayCommand::CopySystemInfo: {
                 std::wstring info = L"Pacecar " + Utf8ToWide(pacecar::CoreVersion()) + L"\n";
                 info += overlay.Diagnostics() + L"\n";
                 info += sampler.Diagnostics() + L"\n";
@@ -713,14 +725,21 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                 MessageBoxW(overlay.Hwnd(), L"Pacecar 2.0\nSystem metrics overlay",
                             L"About Pacecar", MB_OK | MB_ICONINFORMATION);
                 break;
-            case pacecar::overlay::OverlayCommand::ToggleFrameCapture:
-            {
+            case pacecar::overlay::OverlayCommand::ToggleFrameCapture: {
                 const bool enable = !sampler.FrameCaptureEnabled();
                 config.sensors.fps_capture = enable;
                 applyFrameCapture(enable);
                 saver.Touch();
                 break;
             }
+            case pacecar::overlay::OverlayCommand::CycleView:
+                config.general.view = pacecar::overlay::NextViewMode(config.general.view);
+                applyConfigChanges();
+                break;
+            case pacecar::overlay::OverlayCommand::ToggleBackground:
+                config.general.transparent_background = !config.general.transparent_background;
+                applyConfigChanges();
+                break;
             case pacecar::overlay::OverlayCommand::Settings:
                 if (!settingsWindow.Open(settingsHooks))
                 {
@@ -758,19 +777,25 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         if (!commandLine.noHotkey)
         {
             hotkeys.Attach(overlay.Hwnd());
-            hotkeys.SetCallback(
-                [&](int hotkeyId)
+            hotkeys.SetCallback([&](int hotkeyId) {
+                if (hotkeyId == pacecar::overlay::HotkeyManager::kToggleOverlayId)
                 {
-                    if (hotkeyId == pacecar::overlay::HotkeyManager::kToggleOverlayId)
-                    {
-                        overlay.ToggleVisibility();
-                    }
-                    else if (hotkeyId == pacecar::overlay::HotkeyManager::kToggleClickThroughId)
-                    {
-                        overlay.ToggleClickThrough();
-                    }
-                    refreshShellFlags();
-                });
+                    overlay.ToggleVisibility();
+                }
+                else if (hotkeyId == pacecar::overlay::HotkeyManager::kToggleClickThroughId)
+                {
+                    overlay.ToggleClickThrough();
+                }
+                else if (hotkeyId == pacecar::overlay::HotkeyManager::kCycleViewId)
+                {
+                    handleCommand(pacecar::overlay::OverlayCommand::CycleView);
+                }
+                else if (hotkeyId == pacecar::overlay::HotkeyManager::kToggleBackgroundId)
+                {
+                    handleCommand(pacecar::overlay::OverlayCommand::ToggleBackground);
+                }
+                refreshShellFlags();
+            });
 
             const std::wstring overlayHotkey = Utf8ToWide(config.hotkeys.toggle_overlay);
             const pacecar::app::HotkeyParseResult overlayParse =
@@ -785,22 +810,56 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                 pacecar::LogWarn(L"hotkey: invalid overlay hotkey in config: " + overlayHotkey);
             }
 
-            const std::wstring clickThroughHotkey =
-                Utf8ToWide(config.hotkeys.toggle_click_through);
+            const std::wstring clickThroughHotkey = Utf8ToWide(config.hotkeys.toggle_click_through);
             if (!clickThroughHotkey.empty())
             {
                 const pacecar::app::HotkeyParseResult clickParse =
                     pacecar::app::ParseHotkey(clickThroughHotkey);
                 if (clickParse.ok())
                 {
-                    static_cast<void>(hotkeys.Register(
-                        pacecar::overlay::HotkeyManager::kToggleClickThroughId,
-                        clickParse.binding));
+                    static_cast<void>(
+                        hotkeys.Register(pacecar::overlay::HotkeyManager::kToggleClickThroughId,
+                                         clickParse.binding));
                 }
                 else
                 {
                     pacecar::LogWarn(L"hotkey: invalid click-through hotkey in config: " +
                                      clickThroughHotkey);
+                }
+            }
+
+            const std::wstring cycleViewHotkey = Utf8ToWide(config.hotkeys.cycle_view);
+            if (!cycleViewHotkey.empty())
+            {
+                const pacecar::app::HotkeyParseResult cycleParse =
+                    pacecar::app::ParseHotkey(cycleViewHotkey);
+                if (cycleParse.ok())
+                {
+                    static_cast<void>(hotkeys.Register(
+                        pacecar::overlay::HotkeyManager::kCycleViewId, cycleParse.binding));
+                }
+                else
+                {
+                    pacecar::LogWarn(L"hotkey: invalid cycle-view hotkey in config: " +
+                                     cycleViewHotkey);
+                }
+            }
+
+            const std::wstring backgroundHotkey = Utf8ToWide(config.hotkeys.toggle_background);
+            if (!backgroundHotkey.empty())
+            {
+                const pacecar::app::HotkeyParseResult backgroundParse =
+                    pacecar::app::ParseHotkey(backgroundHotkey);
+                if (backgroundParse.ok())
+                {
+                    static_cast<void>(
+                        hotkeys.Register(pacecar::overlay::HotkeyManager::kToggleBackgroundId,
+                                         backgroundParse.binding));
+                }
+                else
+                {
+                    pacecar::LogWarn(L"hotkey: invalid background hotkey in config: " +
+                                     backgroundHotkey);
                 }
             }
         }
@@ -831,8 +890,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     const pacecar::overlay::ProcessUsage baseline = pacecar::overlay::QueryProcessUsage();
 
-    const auto emitReport = [&](const pacecar::overlay::ProcessUsage& finalUsage)
-    {
+    const auto emitReport = [&](const pacecar::overlay::ProcessUsage& finalUsage) {
         std::wstring report;
         report += L"diagnostics: " + overlay.Diagnostics() + L"\n";
         report += L"sampler:     " + sampler.Diagnostics() + L"\n";
@@ -887,20 +945,16 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     static_cast<void>(sampler.Start(config, overlay.Hwnd()));
     applyDeepSensors(config.sensors.deep_sensors);
     applyFrameCapture(config.sensors.fps_capture);
-    overlay.SetVisibilityChangedCallback(
-        [&sampler](bool visible) { sampler.SetVisible(visible); });
+    overlay.SetVisibilityChangedCallback([&sampler](bool visible) { sampler.SetVisible(visible); });
     sampler.SetVisible(overlay.EffectivelyVisible());
 
-    const auto elapsedMs = [&startTime]() -> std::uint64_t
-    {
-        return static_cast<std::uint64_t>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
-                                                                  startTime)
-                .count());
+    const auto elapsedMs = [&startTime]() -> std::uint64_t {
+        return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              std::chrono::steady_clock::now() - startTime)
+                                              .count());
     };
 
-    const auto applyFrame = [&](std::shared_ptr<const pacecar::metrics::DisplayFrame> frame)
-    {
+    const auto applyFrame = [&](std::shared_ptr<const pacecar::metrics::DisplayFrame> frame) {
         if (!frame)
         {
             return;
@@ -924,24 +978,23 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     // immediately and never waits on disk (design ref 05 "Startup").
     std::mutex cacheMutex;
     std::shared_ptr<pacecar::metrics::MetricsSnapshot> cachedSnapshot;
-    std::thread cacheThread(
-        [&overlay, &cacheMutex, &cachedSnapshot]
+    std::thread cacheThread([&overlay, &cacheMutex, &cachedSnapshot] {
+        auto loaded = std::make_shared<pacecar::metrics::MetricsSnapshot>();
+        if (pacecar::metrics::LoadSnapshotCache(pacecar::metrics::SnapshotCachePath(), *loaded))
         {
-            auto loaded = std::make_shared<pacecar::metrics::MetricsSnapshot>();
-            if (pacecar::metrics::LoadSnapshotCache(pacecar::metrics::SnapshotCachePath(), *loaded))
-            {
-                std::lock_guard<std::mutex> lock(cacheMutex);
-                cachedSnapshot = std::move(loaded);
-            }
-            PostMessageW(overlay.Hwnd(), pacecar::overlay::WM_APP_CACHE_READY, 0, 0);
-        });
+            std::lock_guard<std::mutex> lock(cacheMutex);
+            cachedSnapshot = std::move(loaded);
+        }
+        PostMessageW(overlay.Hwnd(), pacecar::overlay::WM_APP_CACHE_READY, 0, 0);
+    });
 
     if (commandLine.measure)
     {
-        SetTimer(overlay.Hwnd(), kMeasureTimerId,
-                 static_cast<UINT>(commandLine.measureSeconds > 0 ? commandLine.measureSeconds : 1) *
-                     1000u,
-                 nullptr);
+        SetTimer(
+            overlay.Hwnd(), kMeasureTimerId,
+            static_cast<UINT>(commandLine.measureSeconds > 0 ? commandLine.measureSeconds : 1) *
+                1000u,
+            nullptr);
     }
     else if (commandLine.exitAfterMs.has_value())
     {

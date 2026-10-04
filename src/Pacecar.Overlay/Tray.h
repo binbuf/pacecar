@@ -1,12 +1,12 @@
 #pragma once
 
-// System tray icon and menu (design ref 04-ui-ux.md "Tray"). The tray runs on the UI thread's single
-// message pump: it owns a hidden top-level window that receives the `Shell_NotifyIcon` callback
-// message and builds the tray menu. Menu handling therefore stays off the render path.
+// System tray icon and menu (design ref 04-ui-ux.md "Tray"). The tray runs on the UI thread's
+// single message pump: it owns a hidden top-level window that receives the `Shell_NotifyIcon`
+// callback message and builds the tray menu. Menu handling therefore stays off the render path.
 //
-// The tray reports the chosen `OverlayCommand` through a callback; the app decides what each command
-// does (toggle visibility, switch click-through, open Settings, quit). Double-clicking the icon
-// reports `ToggleVisibility`.
+// The tray reports the chosen `OverlayCommand` through a callback; the app decides what each
+// command does (toggle visibility, switch click-through, open Settings, quit). Double-clicking the
+// icon reports `ToggleVisibility`.
 
 #include <functional>
 #include <string>
@@ -43,6 +43,7 @@ class Tray
     void SetTooltip(std::wstring_view tooltip);
     void SetVisibleFlag(bool visible) noexcept;
     void SetClickThroughFlag(bool clickThrough) noexcept;
+    void SetBackgroundFlag(bool transparentBackground) noexcept;
 
     void SetCommandCallback(CommandCallback callback)
     {
@@ -72,6 +73,7 @@ class Tray
     bool created_ = false;
     bool visible_ = true;
     bool clickThrough_ = false;
+    bool transparentBackground_ = false;
     CommandCallback commandCallback_{};
     NOTIFYICONDATAW iconData_{};
 };

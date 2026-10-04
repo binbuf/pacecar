@@ -60,7 +60,9 @@ bool CanonicalizeHotkey(std::string_view text, std::string& out)
 {
     std::wstring wide = Utf8ToWide(text);
     // Trim surrounding ASCII whitespace so a stray space form the capture control is not an error.
-    const auto isSpace = [](wchar_t c) { return c == L' ' || c == L'\t' || c == L'\r' || c == L'\n'; };
+    const auto isSpace = [](wchar_t c) {
+        return c == L' ' || c == L'\t' || c == L'\r' || c == L'\n';
+    };
     while (!wide.empty() && isSpace(wide.front()))
     {
         wide.erase(wide.begin());
@@ -128,7 +130,8 @@ const pacecar::TileConfig* SettingsBinding::TileAt(std::size_t tile) const noexc
 
 int SettingsBinding::RefreshIndex() const noexcept
 {
-    return static_cast<int>(OptionIndex(kRefreshOptions, static_cast<int>(config_.general.refresh)));
+    return static_cast<int>(
+        OptionIndex(kRefreshOptions, static_cast<int>(config_.general.refresh)));
 }
 
 void SettingsBinding::SetRefreshIndex(int index) noexcept
@@ -170,6 +173,29 @@ void SettingsBinding::SetLayoutIndex(int index) noexcept
 {
     const std::size_t clamped = ClampOptionIndex(index, kLayoutOptions.size());
     config_.general.layout = kLayoutOptions[clamped];
+    Changed();
+}
+
+int SettingsBinding::ViewIndex() const noexcept
+{
+    return static_cast<int>(OptionIndex(kViewOptions, config_.general.view));
+}
+
+void SettingsBinding::SetViewIndex(int index) noexcept
+{
+    const std::size_t clamped = ClampOptionIndex(index, kViewOptions.size());
+    config_.general.view = kViewOptions[clamped];
+    Changed();
+}
+
+bool SettingsBinding::TransparentBackground() const noexcept
+{
+    return config_.general.transparent_background;
+}
+
+void SettingsBinding::SetTransparentBackground(bool enabled)
+{
+    config_.general.transparent_background = enabled;
     Changed();
 }
 
@@ -523,6 +549,40 @@ bool SettingsBinding::SetToggleClickThroughHotkey(std::string_view text)
         return false;
     }
     config_.hotkeys.toggle_click_through = std::move(canonical);
+    Changed();
+    return true;
+}
+
+std::string_view SettingsBinding::CycleViewHotkey() const noexcept
+{
+    return config_.hotkeys.cycle_view;
+}
+
+bool SettingsBinding::SetCycleViewHotkey(std::string_view text)
+{
+    std::string canonical;
+    if (!CanonicalizeHotkey(text, canonical))
+    {
+        return false;
+    }
+    config_.hotkeys.cycle_view = std::move(canonical);
+    Changed();
+    return true;
+}
+
+std::string_view SettingsBinding::ToggleBackgroundHotkey() const noexcept
+{
+    return config_.hotkeys.toggle_background;
+}
+
+bool SettingsBinding::SetToggleBackgroundHotkey(std::string_view text)
+{
+    std::string canonical;
+    if (!CanonicalizeHotkey(text, canonical))
+    {
+        return false;
+    }
+    config_.hotkeys.toggle_background = std::move(canonical);
     Changed();
     return true;
 }

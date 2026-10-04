@@ -114,6 +114,11 @@ void Tray::SetClickThroughFlag(bool clickThrough) noexcept
     clickThrough_ = clickThrough;
 }
 
+void Tray::SetBackgroundFlag(bool transparentBackground) noexcept
+{
+    transparentBackground_ = transparentBackground;
+}
+
 void Tray::ShowMenu(POINT screenPoint)
 {
     if (hwnd_ == nullptr)
@@ -130,6 +135,10 @@ void Tray::ShowMenu(POINT screenPoint)
     {
         UINT flags = MF_STRING;
         if (command == OverlayCommand::Mode && clickThrough_)
+        {
+            flags |= MF_CHECKED;
+        }
+        if (command == OverlayCommand::ToggleBackground && transparentBackground_)
         {
             flags |= MF_CHECKED;
         }
@@ -200,8 +209,7 @@ LRESULT Tray::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
             }
             return 0;
         case WM_RBUTTONUP:
-        case WM_CONTEXTMENU:
-        {
+        case WM_CONTEXTMENU: {
             POINT point{};
             GetCursorPos(&point);
             ShowMenu(point);

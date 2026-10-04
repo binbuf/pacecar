@@ -54,6 +54,25 @@ enum class LayoutPreset
     Custom,
 };
 
+// The overlay presentation "view" the user cycles through at runtime. This is independent of
+// `LayoutPreset`: `LayoutPreset` refines the arrangement inside the two dense views, while
+// `ViewMode` selects how much is shown and how each tile is presented.
+//
+//   Full         - the full panel: header plus the configured tiles and their visuals.
+//   LargeVisuals - fewer, larger tiles; values are placed inside/around their gauge or graph.
+//   SmallText    - a compact text-only readout (label + value per metric, no visuals).
+//   FpsOnly      - just the FPS / frame-time text readout.
+//
+// The two text views (`SmallText`, `FpsOnly`) look best with the panel background turned off, so
+// the overlay reads as plain text over the desktop/game.
+enum class ViewMode
+{
+    Full = 0,
+    LargeVisuals,
+    SmallText,
+    FpsOnly,
+};
+
 enum class OverlayMode
 {
     Interactive,
@@ -149,6 +168,11 @@ struct GeneralConfig
     double opacity = 0.65;
     Theme theme = Theme::Dark;
     LayoutPreset layout = LayoutPreset::Compact3x3;
+    // The active presentation view (cycled at runtime via menu/hotkey).
+    ViewMode view = ViewMode::Full;
+    // When true the panel/header background is not drawn, so the overlay is just text (and, in the
+    // visual views, the accent drawings) floating over the desktop/game.
+    bool transparent_background = false;
     bool start_with_windows = false;
     bool start_hidden = false;
 };
@@ -200,6 +224,10 @@ struct HotkeysConfig
 {
     std::string toggle_overlay = "Ctrl+Shift+P";
     std::string toggle_click_through = "";
+    // Cycles Full -> LargeVisuals -> SmallText -> FpsOnly. Empty disables the binding.
+    std::string cycle_view = "Ctrl+Shift+V";
+    // Toggles the panel background on/off. Empty disables the binding.
+    std::string toggle_background = "Ctrl+Shift+B";
 };
 
 struct Config

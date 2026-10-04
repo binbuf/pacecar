@@ -24,6 +24,8 @@ class HotkeyManager
     // WM_HOTKEY ids used by the app.
     static constexpr int kToggleOverlayId = 1;
     static constexpr int kToggleClickThroughId = 2;
+    static constexpr int kCycleViewId = 3;
+    static constexpr int kToggleBackgroundId = 4;
 
     using Callback = std::function<void(int hotkeyId)>;
 
