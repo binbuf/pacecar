@@ -92,6 +92,19 @@ const MonitorWorkArea* PrimaryMonitor(const std::vector<MonitorWorkArea>& monito
     return monitors.empty() ? nullptr : &monitors.front();
 }
 
+IntRect TopRightPlacement(const MonitorWorkArea& monitor, int width, int height,
+                          int margin) noexcept
+{
+    if (width <= 0 || height <= 0 || monitor.workArea.IsEmpty())
+    {
+        return IntRect{};
+    }
+    const int inset = margin > 0 ? margin : 0;
+    const int right = monitor.workArea.right - inset;
+    const int top = monitor.workArea.top + inset;
+    return IntRect{right - width, top, right, top + height};
+}
+
 const MonitorWorkArea* FindNearestMonitor(const IntRect& rect,
                                           const std::vector<MonitorWorkArea>& monitors) noexcept
 {

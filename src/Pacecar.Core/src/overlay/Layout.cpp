@@ -313,6 +313,30 @@ void ApplyViewMode(LayoutSettings& settings, pacecar::ViewMode view) noexcept
         }
         break;
     }
+    case pacecar::ViewMode::StatRows: {
+        // The simplest readout: one plain text line per visible stat. The scene draws the list
+        // itself (WidgetScene::DrawStatRows); the layout engine only needs the visibility flags.
+        // The panel background is forced off so the view is just text labels floating over the
+        // desktop/game with a soft shadow.
+        settings.drawBackground = false;
+        settings.preset = pacecar::LayoutPreset::AutoFit;
+        settings.tileMetrics.labelHeight = 9.0f;
+        settings.tileMetrics.primaryHeight = 14.0f;
+        settings.tileMetrics.lineHeight = 10.0f;
+        settings.tileMetrics.minWidth = 60.0f;
+        settings.tileMetrics.padding = 3.0f;
+        settings.tileGap = 2.0f;
+        for (TileSettings& tile : settings.tiles)
+        {
+            tile.fields.label = true;
+            tile.fields.primary = true;
+            tile.fields.secondary = false;
+            tile.fields.tertiary = false;
+            tile.fields.visualization = false;
+            tile.fields.miniSparkline = false;
+        }
+        break;
+    }
     case pacecar::ViewMode::FpsOnly: {
         // Just the frame-time readout. Ignore the per-tile config: only FPS is shown.
         settings.preset = pacecar::LayoutPreset::Compact3x3;
@@ -344,6 +368,7 @@ LayoutSettings LayoutSettingsFromConfig(const pacecar::Config& config) noexcept
 {
     LayoutSettings settings = DefaultLayoutSettings();
     settings.preset = config.general.layout;
+    settings.statTextSize = static_cast<float>(config.general.stat_text_size);
     settings.drawBackground = !config.general.transparent_background;
     settings.drawHeader =
         settings.drawBackground && (config.general.view == pacecar::ViewMode::Full ||

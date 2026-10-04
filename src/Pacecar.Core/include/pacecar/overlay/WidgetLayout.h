@@ -89,6 +89,9 @@ struct TileLayoutMetrics
     float primaryHeight = 22.0f;
     float lineHeight = 12.0f;
     float lineGap = 2.0f;
+    // Vertical gap between stacked text lines for tiles that have no visualization. Text-only rows
+    // need more breathing room than lines tucked under a gauge/sparkline.
+    float textLineGap = 5.0f;
     float graphHeight = 44.0f;
     float miniSparklineHeight = 16.0f;
     float sectionGap = 4.0f;

@@ -188,6 +188,17 @@ void SettingsBinding::SetViewIndex(int index) noexcept
     Changed();
 }
 
+int SettingsBinding::StatTextSize() const noexcept
+{
+    return config_.general.stat_text_size;
+}
+
+void SettingsBinding::SetStatTextSize(int size) noexcept
+{
+    config_.general.stat_text_size = std::clamp(size, kStatTextSizeMin, kStatTextSizeMax);
+    Changed();
+}
+
 bool SettingsBinding::TransparentBackground() const noexcept
 {
     return config_.general.transparent_background;

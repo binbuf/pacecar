@@ -44,6 +44,10 @@ class Tray
     void SetVisibleFlag(bool visible) noexcept;
     void SetClickThroughFlag(bool clickThrough) noexcept;
     void SetBackgroundFlag(bool transparentBackground) noexcept;
+    void SetViewFlag(pacecar::ViewMode view) noexcept
+    {
+        view_ = view;
+    }
 
     void SetCommandCallback(CommandCallback callback)
     {
@@ -74,6 +78,7 @@ class Tray
     bool visible_ = true;
     bool clickThrough_ = false;
     bool transparentBackground_ = false;
+    pacecar::ViewMode view_ = pacecar::ViewMode::Full;
     CommandCallback commandCallback_{};
     NOTIFYICONDATAW iconData_{};
 };

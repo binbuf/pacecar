@@ -34,6 +34,7 @@ constexpr int kIdStartWindows = 1015;
 constexpr int kIdStartHidden = 1016;
 constexpr int kIdViewCombo = 1017;
 constexpr int kIdTransparentBackground = 1018;
+constexpr int kIdStatTextSize = 1019;
 
 constexpr int kIdModeCombo = 1020;
 constexpr int kIdAlwaysOnTop = 1021;
@@ -442,27 +443,39 @@ void SettingsWindow::BuildGeneralPage()
         150, 173, 180, 200, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdViewCombo)),
         instance_, nullptr);
     AddControl(page, view);
-    const std::array<const wchar_t*, 4> viewNames{L"Full panel", L"Large visuals", L"Small text",
-                                                  L"FPS only"};
+    const std::array<const wchar_t*, 5> viewNames{L"Full panel", L"Large visuals", L"Small text",
+                                                  L"Stat rows", L"FPS only"};
     for (const wchar_t* name : viewNames)
     {
         SendMessageW(view, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
     }
 
+    AddControl(page, MakeLabel(hwnd_, instance_, L"Text size (DIP):", 16, 208, 130));
+    HWND textSize = CreateWindowExW(
+        0, TRACKBAR_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_NOTICKS, 150,
+        206, 150, 24, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdStatTextSize)),
+        instance_, nullptr);
+    AddControl(page, textSize);
+    SendMessageW(textSize, TBM_SETRANGE, TRUE,
+                 MAKELPARAM(kStatTextSizeMin, kStatTextSizeMax));
+    SendMessageW(textSize, TBM_SETLINESIZE, 0, 1);
+    SendMessageW(textSize, TBM_SETPAGESIZE, 0, 2);
+    AddControl(page, MakeLabel(hwnd_, instance_, L"px", 308, 208, 40));
+
     AddControl(page,
                CreateWindowExW(
                    0, L"BUTTON", L"Transparent background (text only)",
-                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 202, 300, 22, hwnd_,
+                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 238, 320, 22, hwnd_,
                    reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdTransparentBackground)),
                    instance_, nullptr));
 
     AddControl(page, CreateWindowExW(0, L"BUTTON", L"Start with Windows",
-                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 234,
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 266,
                                      220, 22, hwnd_,
                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdStartWindows)),
                                      instance_, nullptr));
     AddControl(page, CreateWindowExW(0, L"BUTTON", L"Start hidden (tray only)",
-                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 260,
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 292,
                                      260, 22, hwnd_,
                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdStartHidden)),
                                      instance_, nullptr));
@@ -519,37 +532,59 @@ void SettingsWindow::BuildTilesPage()
     const int page = kPageTiles;
     const std::array<const wchar_t*, 6> tileNames{L"CPU",     L"RAM",  L"GPU",
                                                   L"Network", L"Disk", L"Ping"};
-    const std::array<const wchar_t*, 5> headers{L"Visible", L"Primary", L"Secondary", L"Tertiary",
-                                                L"Graph"};
-    const int columnX[5] = {80, 160, 236, 312, 388};
 
-    for (int c = 0; c < 5; ++c)
-    {
-        AddControl(page, MakeLabel(hwnd_, instance_, headers[c], columnX[c], 42, 76));
-    }
-    AddControl(page, MakeLabel(hwnd_, instance_, L"Mini", 80, 60, 76));
-    AddControl(page, MakeLabel(hwnd_, instance_, L"Spark", 160, 60, 76));
+    // One header row over a single grid. Each field owns a distinct column; the two visualization
+    // controls are separate: "Graph" shows the visual, "Sparkline" selects sparkline vs gauge.
+    const int nameX = 16;
+    const int visibleX = 90;
+    const int primaryX = 122;
+    const int secondaryX = 158;
+    const int tertiaryX = 194;
+    const int graphX = 230;
+    const int miniX = 266;
+    const int sparkX = 310;
+    const int headerY = 42;
+    const int rowTop = 70;
+    const int rowStep = 26;
+
+    const auto header = [&](const wchar_t* text, int x, int w) {
+        AddControl(page, MakeLabel(hwnd_, instance_, text, x, headerY, w));
+    };
+    header(L"Tile", nameX, 70);
+    header(L"Shown", visibleX, 46);
+    header(L"Value", primaryX, 46);
+    header(L"Detail 1", secondaryX, 56);
+    header(L"Detail 2", tertiaryX, 56);
+    header(L"Graph", graphX, 46);
+    header(L"Mini", miniX, 46);
+    header(L"Sparkline", sparkX, 76);
 
     for (int t = 0; t < 6; ++t)
     {
-        const int y = 82 + t * 26;
-        AddControl(page, MakeLabel(hwnd_, instance_, tileNames[t], 16, y, 60));
+        const int y = rowTop + t * rowStep;
+        AddControl(page, MakeLabel(hwnd_, instance_, tileNames[t], nameX, y, 70));
 
-        const auto makeCheck = [&](int id, int x, const wchar_t* text) {
+        const auto makeCheck = [&](int id, int x, int w, const wchar_t* text) {
             HWND box = CreateWindowExW(
                 0, L"BUTTON", text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, x, y - 2,
-                76, 22, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance_,
+                w, 22, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance_,
                 nullptr);
             AddControl(page, box);
         };
-        makeCheck(kIdTileVisibleBase + t, columnX[0], L"");
-        makeCheck(kIdTilePrimaryBase + t, columnX[1], L"");
-        makeCheck(kIdTileSecondaryBase + t, columnX[2], L"");
-        makeCheck(kIdTileTertiaryBase + t, columnX[3], L"");
-        makeCheck(kIdTileGraphBase + t, columnX[4], L"");
-        makeCheck(kIdTileMiniBase + t, 84, L"");
-        makeCheck(kIdTileVisComboBase + t, 160, L"Sparklines");
+        makeCheck(kIdTileVisibleBase + t, visibleX, 30, L"");
+        makeCheck(kIdTilePrimaryBase + t, primaryX, 30, L"");
+        makeCheck(kIdTileSecondaryBase + t, secondaryX, 30, L"");
+        makeCheck(kIdTileTertiaryBase + t, tertiaryX, 30, L"");
+        makeCheck(kIdTileGraphBase + t, graphX, 30, L"");
+        makeCheck(kIdTileMiniBase + t, miniX, 30, L"");
+        makeCheck(kIdTileVisComboBase + t, sparkX, 80, L"");
     }
+
+    AddControl(page, MakeLabel(hwnd_, instance_,
+                               L"Value/Detail toggle the text lines; Detail 1 is the secondary line. "
+                               L"Graph shows the gauge or sparkline; Sparkline switches that graph "
+                               L"between a gauge (off) and a sparkline (on).",
+                               16, rowTop + 6 * rowStep + 4, 470, 34));
 }
 
 void SettingsWindow::BuildSensorsPage()
@@ -740,6 +775,10 @@ void SettingsWindow::RefreshFromConfig()
     setCombo(kIdThemeCombo, binding_->ThemeIndex());
     setCombo(kIdLayoutCombo, binding_->LayoutIndex());
     setCombo(kIdViewCombo, binding_->ViewIndex());
+    if (HWND textSize = GetDlgItem(hwnd_, kIdStatTextSize))
+    {
+        SendMessageW(textSize, TBM_SETPOS, TRUE, static_cast<LPARAM>(binding_->StatTextSize()));
+    }
     setCheck(kIdTransparentBackground, binding_->TransparentBackground());
     setCheck(kIdStartWindows, binding_->StartWithWindows());
     setCheck(kIdStartHidden, binding_->StartHidden());
@@ -832,6 +871,24 @@ void SettingsWindow::RefreshFromConfig()
     }
 
     loading_ = false;
+    UpdateViewDependentControls();
+}
+
+void SettingsWindow::UpdateViewDependentControls()
+{
+    if (binding_ == nullptr || hwnd_ == nullptr)
+    {
+        return;
+    }
+    const std::size_t index = static_cast<std::size_t>(binding_->ViewIndex());
+    const bool statRows = index < kViewOptions.size() &&
+                          kViewOptions[index] == pacecar::ViewMode::StatRows;
+    // The value font size only affects the StatRows view; grey it out elsewhere so it never looks
+    // like a no-op.
+    if (HWND textSize = GetDlgItem(hwnd_, kIdStatTextSize))
+    {
+        EnableWindow(textSize, statRows);
+    }
 }
 
 void SettingsWindow::ApplyLive()
@@ -999,6 +1056,7 @@ void SettingsWindow::OnCommand(int controlId, int notifyCode, HWND /*control*/)
     if (controlId == kIdViewCombo && notifyCode == CBN_SELCHANGE)
     {
         binding_->SetViewIndex(comboSelection(kIdViewCombo));
+        UpdateViewDependentControls();
         return;
     }
     if (controlId == kIdModeCombo && notifyCode == CBN_SELCHANGE)
@@ -1190,6 +1248,14 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LP
             const LRESULT position =
                 SendMessageW(GetDlgItem(hwnd_, kIdOpacitySlider), TBM_GETPOS, 0, 0);
             binding_->SetOpacity(static_cast<double>(position) / 100.0);
+            return 0;
+        }
+        if (binding_ != nullptr &&
+            reinterpret_cast<HWND>(lParam) == GetDlgItem(hwnd_, kIdStatTextSize))
+        {
+            const LRESULT position =
+                SendMessageW(GetDlgItem(hwnd_, kIdStatTextSize), TBM_GETPOS, 0, 0);
+            binding_->SetStatTextSize(static_cast<int>(position));
             return 0;
         }
         break;

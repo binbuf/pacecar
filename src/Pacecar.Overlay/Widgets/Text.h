@@ -61,8 +61,16 @@ class TextRenderer
     void DrawText(ID2D1RenderTarget* target, std::uint32_t formatId, std::wstring_view text,
                   const RectF& rect, ID2D1Brush* brush);
 
+    // Width in DIPs of `text` rendered with `formatId`, using the same layout cache as `DrawText`.
+    // Returns 0 when the format or layout is unavailable. Used to place columns without a gap.
+    [[nodiscard]] float MeasureWidth(std::uint32_t formatId, std::wstring_view text);
+
     // Drops cached layouts (device loss / occlusion).
     void Trim();
+
+    // Drops every registered format and cached layout. Used when text metrics change live (e.g. the
+    // user adjusts the value font size); the owner must re-register its formats afterwards.
+    void Reset();
 
     [[nodiscard]] std::size_t LayoutCount() const noexcept
     {

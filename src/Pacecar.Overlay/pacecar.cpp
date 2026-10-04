@@ -531,6 +531,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
             tray.SetVisibleFlag(overlay.IsVisible());
             tray.SetClickThroughFlag(overlay.ClickThrough());
             tray.SetBackgroundFlag(config.general.transparent_background);
+            tray.SetViewFlag(config.general.view);
         }
     };
 
@@ -736,6 +737,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                 config.general.view = pacecar::overlay::NextViewMode(config.general.view);
                 applyConfigChanges();
                 break;
+            case pacecar::overlay::OverlayCommand::ViewFull:
+            case pacecar::overlay::OverlayCommand::ViewLargeVisuals:
+            case pacecar::overlay::OverlayCommand::ViewSmallText:
+            case pacecar::overlay::OverlayCommand::ViewStatRows:
+            case pacecar::overlay::OverlayCommand::ViewFpsOnly:
+                if (const auto view = pacecar::overlay::ViewModeForCommand(command))
+                {
+                    config.general.view = *view;
+                    applyConfigChanges();
+                }
+                break;
             case pacecar::overlay::OverlayCommand::ToggleBackground:
                 config.general.transparent_background = !config.general.transparent_background;
                 applyConfigChanges();
@@ -763,6 +775,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
             }
         };
 
+        // The overlay's own right-click menu and the tray menu both route commands through the same
+        // handler. Without this the overlay menu items (view, background, settings, ...) are inert.
+        overlay.SetCommandCallback(handleCommand);
+
         if (!commandLine.noTray)
         {
             trayCreated = tray.Create(hInstance, IDI_PACECAR, L"Pacecar");
@@ -771,6 +787,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                 tray.SetCommandCallback(handleCommand);
                 tray.SetVisibleFlag(true);
                 tray.SetClickThroughFlag(overlay.ClickThrough());
+                tray.SetBackgroundFlag(config.general.transparent_background);
             }
         }
 

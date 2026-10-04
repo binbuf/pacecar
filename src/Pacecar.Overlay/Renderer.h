@@ -67,6 +67,9 @@ class IRenderer
     // Applies the config-driven layout preset/toggles. Takes effect on the next `Present`.
     virtual void SetLayout(const LayoutSettings& layout) = 0;
 
+    // Sets the display refresh rate the FPS gauge is scaled against. Takes effect on the next draw.
+    virtual void SetTargetFps(double fps) = 0;
+
     // Publishes a new metrics frame (snapshot + sparkline tails) for the widget scene. A null frame
     // returns to the neutral placeholders. Takes effect on the next `Present`.
     virtual void SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame) = 0;

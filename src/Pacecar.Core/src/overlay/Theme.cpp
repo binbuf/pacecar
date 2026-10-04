@@ -31,6 +31,26 @@ AccentPalette DarkPalette() noexcept
     return palette;
 }
 
+AccentPalette LightPalette() noexcept
+{
+    AccentPalette palette{};
+    // Darkened curves of the dark-theme accents so they stay legible on the light panel.
+    palette.cpu = Rgb(30.0f / 255.0f, 90.0f / 255.0f, 190.0f / 255.0f);      // deep blue
+    palette.ram = Rgb(20.0f / 255.0f, 130.0f / 255.0f, 60.0f / 255.0f);      // forest green
+    palette.gpu = Rgb(190.0f / 255.0f, 40.0f / 255.0f, 40.0f / 255.0f);      // strong red
+    palette.network = Rgb(200.0f / 255.0f, 110.0f / 255.0f, 0.0f / 255.0f);  // amber orange
+    palette.disk = Rgb(110.0f / 255.0f, 70.0f / 255.0f, 180.0f / 255.0f);    // violet
+    palette.ping = Rgb(0.0f / 255.0f, 130.0f / 255.0f, 130.0f / 255.0f);     // teal
+    palette.fans = Rgb(180.0f / 255.0f, 80.0f / 255.0f, 120.0f / 255.0f);    // magenta
+    palette.mainboard = Rgb(150.0f / 255.0f, 110.0f / 255.0f, 20.0f / 255.0f); // bronze
+    palette.text = Rgb(0.10f, 0.11f, 0.14f);
+    palette.textDim = ColorF{0.34f, 0.36f, 0.40f, 0.95f};
+    palette.panelBackground = ColorF{0.96f, 0.97f, 0.99f, 1.0f};
+    palette.panelBorder = ColorF{0.45f, 0.48f, 0.54f, 0.65f};
+    palette.track = ColorF{0.72f, 0.75f, 0.80f, 0.90f};
+    return palette;
+}
+
 AccentPalette HighContrastPalette(bool lightBackground) noexcept
 {
     const ColorF foreground = lightBackground ? Rgb(0.0f, 0.0f, 0.0f) : Rgb(1.0f, 1.0f, 1.0f);
@@ -99,7 +119,7 @@ ResolvedTheme ResolveTheme(const ThemeInputs& inputs) noexcept
         return resolved;
     }
 
-    resolved.palette = DarkPalette();
+    resolved.palette = inputs.theme == pacecar::Theme::Light ? LightPalette() : DarkPalette();
     resolved.highContrast = false;
     resolved.requireNonColorCue = false;
     resolved.palette.panelBackground = ApplyOpacity(resolved.palette.panelBackground, inputs.opacity);

@@ -187,8 +187,8 @@ constexpr auto kThemeNames =
     std::array<std::pair<const char*, int>, 3>{{{"dark", 0}, {"light", 1}, {"high_contrast", 2}}};
 constexpr auto kLayoutNames = std::array<std::pair<const char*, int>, 4>{
     {{"compact_3x3", 0}, {"vertical_1x6", 1}, {"auto_fit", 2}, {"custom", 3}}};
-constexpr auto kViewNames = std::array<std::pair<const char*, int>, 4>{
-    {{"full", 0}, {"large_visuals", 1}, {"small_text", 2}, {"fps_only", 3}}};
+constexpr auto kViewNames = std::array<std::pair<const char*, int>, 5>{
+    {{"full", 0}, {"large_visuals", 1}, {"small_text", 2}, {"stat_rows", 3}, {"fps_only", 4}}};
 constexpr auto kOverlayModeNames =
     std::array<std::pair<const char*, int>, 2>{{{"interactive", 0}, {"click_through", 1}}};
 constexpr auto kVisualizationNames =
@@ -236,6 +236,8 @@ const char* ViewToString(ViewMode view)
         return "large_visuals";
     case ViewMode::SmallText:
         return "small_text";
+    case ViewMode::StatRows:
+        return "stat_rows";
     case ViewMode::FpsOnly:
         return "fps_only";
     case ViewMode::Full:
@@ -370,21 +372,23 @@ void to_json(Json& j, const TilesConfig& tiles)
 
 void from_json(const Json& j, TilesConfig& tiles)
 {
-    const auto sub = [&j](const char* key) -> Json {
+    // Assign only the keys that are present, so an absent tile keeps the per-tile default from
+    // `TilesConfig` (for example the text-only network/disk/ping and the hidden FPS tile) rather
+    // than the generic visible `TileConfig`.
+    const auto assign = [&j](const char* key, TileConfig& target) {
         const auto it = j.find(key);
-        return (it != j.end() && it->is_object()) ? *it : Json::object();
+        if (it != j.end() && it->is_object())
+        {
+            target = it->get<TileConfig>();
+        }
     };
-    tiles.cpu = sub("cpu").get<TileConfig>();
-    tiles.ram = sub("ram").get<TileConfig>();
-    tiles.gpu = sub("gpu").get<TileConfig>();
-    tiles.network = sub("network").get<TileConfig>();
-    tiles.disk = sub("disk").get<TileConfig>();
-    tiles.ping = sub("ping").get<TileConfig>();
-    // The FPS tile defaults to hidden; a missing "fps" key must reproduce that default rather than
-    // the generic visible TileConfig.
-    const auto fpsIt = j.find("fps");
-    tiles.fps = (fpsIt != j.end() && fpsIt->is_object()) ? fpsIt->get<TileConfig>()
-                                                         : pacecar::TileConfig{false};
+    assign("cpu", tiles.cpu);
+    assign("ram", tiles.ram);
+    assign("gpu", tiles.gpu);
+    assign("network", tiles.network);
+    assign("disk", tiles.disk);
+    assign("ping", tiles.ping);
+    assign("fps", tiles.fps);
 }
 
 void to_json(Json& j, const GeneralConfig& general)
@@ -394,6 +398,7 @@ void to_json(Json& j, const GeneralConfig& general)
              {"theme", ThemeToString(general.theme)},
              {"layout_preset", LayoutToString(general.layout)},
              {"view", ViewToString(general.view)},
+             {"stat_text_size", general.stat_text_size},
              {"transparent_background", general.transparent_background},
              {"start_with_windows", general.start_with_windows},
              {"start_hidden", general.start_hidden}};
@@ -412,6 +417,7 @@ void from_json(const Json& j, GeneralConfig& general)
         ParseEnumIndex(j, "layout_preset", kLayoutNames, static_cast<int>(defaults.layout)));
     general.view = static_cast<ViewMode>(
         ParseEnumIndex(j, "view", kViewNames, static_cast<int>(defaults.view)));
+    general.stat_text_size = GetInt(j, "stat_text_size", defaults.stat_text_size);
     general.transparent_background =
         GetBool(j, "transparent_background", defaults.transparent_background);
     general.start_with_windows = GetBool(j, "start_with_windows", defaults.start_with_windows);
@@ -588,8 +594,10 @@ void Config::Clamp()
     if (static_cast<int>(general.view) < static_cast<int>(ViewMode::Full) ||
         static_cast<int>(general.view) > static_cast<int>(ViewMode::FpsOnly))
     {
-        general.view = ViewMode::Full;
+        general.view = ViewMode::StatRows;
     }
+
+    general.stat_text_size = std::clamp(general.stat_text_size, 6, 40);
 
     history.retention_minutes = NearestAllowed(history.retention_minutes, kAllowedRetention, 30);
 

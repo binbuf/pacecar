@@ -78,6 +78,9 @@ TileLayout ComputeTileLayout(float widthDip, float heightDip,
     const float bottom = content.bottom;
     float y = content.top;
 
+    // Text-only tiles get wider spacing between their lines than lines tucked under a diagram.
+    const float textGap = visibility.visualization ? metrics.lineGap : metrics.textLineGap;
+
     const auto nextBand = [&](float bandHeight, float gapAfter) noexcept -> RectF
     {
         const float top = y;
@@ -88,7 +91,7 @@ TileLayout ComputeTileLayout(float widthDip, float heightDip,
 
     if (visibility.label)
     {
-        layout.label = nextBand(metrics.labelHeight, metrics.lineGap);
+        layout.label = nextBand(metrics.labelHeight, textGap);
     }
     if (visibility.visualization)
     {
@@ -101,15 +104,15 @@ TileLayout ComputeTileLayout(float widthDip, float heightDip,
     }
     else if (visibility.primary)
     {
-        layout.primary = nextBand(metrics.primaryHeight, metrics.lineGap);
+        layout.primary = nextBand(metrics.primaryHeight, textGap);
     }
     if (visibility.secondary)
     {
-        layout.secondary = nextBand(metrics.lineHeight, metrics.lineGap);
+        layout.secondary = nextBand(metrics.lineHeight, textGap);
     }
     if (visibility.tertiary)
     {
-        layout.tertiary = nextBand(metrics.lineHeight, metrics.lineGap);
+        layout.tertiary = nextBand(metrics.lineHeight, textGap);
     }
     if (visibility.miniSparkline)
     {

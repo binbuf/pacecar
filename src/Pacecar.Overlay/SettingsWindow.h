@@ -83,6 +83,9 @@ class SettingsWindow
     void BuildAboutPage();
     void ShowPage(int index);
     void RefreshFromConfig();
+    // Enables/disables controls that only apply to some presentation views (e.g. the StatRows value
+    // font size). Called after loading and whenever the view changes.
+    void UpdateViewDependentControls();
     void OnCommand(int controlId, int notifyCode, HWND control);
     void OnHotkeyCaptured(int controlId);
     void ApplyLive();

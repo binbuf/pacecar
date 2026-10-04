@@ -97,6 +97,13 @@ inline constexpr int kDefaultVisibleMargin = 32;
 [[nodiscard]] const MonitorWorkArea* PrimaryMonitor(
     const std::vector<MonitorWorkArea>& monitors) noexcept;
 
+// The default placement for a fresh config: a `width` x `height` rectangle (physical pixels) anchored
+// to the top-right corner of `monitor`'s work area, inset from the top and right edges by `margin`.
+// The rectangle is not clamped here; callers pass the result through `ClampToWorkArea`. Returns an
+// empty rectangle when `monitor` is empty or the size is non-positive.
+[[nodiscard]] IntRect TopRightPlacement(const MonitorWorkArea& monitor, int width, int height,
+                                        int margin) noexcept;
+
 // --- DPI math ---------------------------------------------------------------------------------
 
 inline constexpr unsigned kBaseDpi = 96;

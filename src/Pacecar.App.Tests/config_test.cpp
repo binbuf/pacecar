@@ -103,7 +103,8 @@ const char* kDefaultConfigJson = R"JSON({
     "opacity": 0.65,
     "theme": "dark",
     "layout_preset": "compact_3x3",
-    "view": "full",
+    "view": "stat_rows",
+    "stat_text_size": 9,
     "transparent_background": false,
     "start_with_windows": false,
     "start_hidden": false
@@ -149,7 +150,7 @@ const char* kDefaultConfigJson = R"JSON({
       "show_primary": true,
       "show_secondary": true,
       "show_tertiary": true,
-      "show_visualization": true,
+      "show_visualization": false,
       "visualization": "gauges",
       "mini_sparklines": false
     },
@@ -158,7 +159,7 @@ const char* kDefaultConfigJson = R"JSON({
       "show_primary": true,
       "show_secondary": true,
       "show_tertiary": true,
-      "show_visualization": true,
+      "show_visualization": false,
       "visualization": "gauges",
       "mini_sparklines": false
     },
@@ -167,7 +168,7 @@ const char* kDefaultConfigJson = R"JSON({
       "show_primary": true,
       "show_secondary": true,
       "show_tertiary": true,
-      "show_visualization": true,
+      "show_visualization": false,
       "visualization": "gauges",
       "mini_sparklines": false
     },
@@ -208,7 +209,7 @@ const char* kDefaultConfigJson = R"JSON({
   "hotkeys": {
     "toggle_overlay": "Ctrl+Shift+P",
     "toggle_click_through": "",
-    "cycle_view": "Ctrl+Shift+V",
+    "cycle_view": "Alt+F12",
     "toggle_background": "Ctrl+Shift+B"
   }
 })JSON";
@@ -221,6 +222,7 @@ TEST(ConfigDefaults, MatchesSpec)
     EXPECT_DOUBLE_EQ(config.general.opacity, 0.65);
     EXPECT_EQ(config.general.theme, Theme::Dark);
     EXPECT_EQ(config.general.layout, LayoutPreset::Compact3x3);
+    EXPECT_EQ(config.general.stat_text_size, 9);
     EXPECT_FALSE(config.general.start_with_windows);
     EXPECT_FALSE(config.general.start_hidden);
     EXPECT_EQ(config.overlay.mode, OverlayMode::Interactive);
@@ -469,12 +471,34 @@ TEST(ConfigSerialization, ViewAndBackgroundRoundTrip)
     EXPECT_EQ(loaded.hotkeys.toggle_background, "Ctrl+Alt+B");
 }
 
+TEST(ConfigSerialization, StatRowsViewAndTextSizeRoundTrip)
+{
+    Config config = Config::Defaults();
+    config.general.view = ViewMode::StatRows;
+    config.general.stat_text_size = 16;
+
+    Config loaded;
+    ASSERT_TRUE(ConfigFromJsonString(ConfigToJsonString(config), loaded));
+    EXPECT_EQ(loaded.general.view, ViewMode::StatRows);
+    EXPECT_EQ(loaded.general.stat_text_size, 16);
+}
+
+TEST(ConfigClamp, StatTextSizeRepaired)
+{
+    Config config;
+    ASSERT_TRUE(ConfigFromJsonString(R"({"general":{"stat_text_size":100}})", config));
+    EXPECT_EQ(config.general.stat_text_size, 40);
+
+    ASSERT_TRUE(ConfigFromJsonString(R"({"general":{"stat_text_size":1}})", config));
+    EXPECT_EQ(config.general.stat_text_size, 6);
+}
+
 TEST(ConfigClamp, OutOfRangeViewFallsBack)
 {
     Config config = Config::Defaults();
     config.general.view = static_cast<ViewMode>(99);
     config.Clamp();
-    EXPECT_EQ(config.general.view, ViewMode::Full);
+    EXPECT_EQ(config.general.view, ViewMode::StatRows);
 }
 
 TEST(ConfigDebounce, CoalescesRapidMutations)

@@ -103,6 +103,17 @@ class OverlayWindow
         return clickThrough_;
     }
 
+    // The active presentation view, for the context/tray menus to label and check.
+    [[nodiscard]] pacecar::ViewMode View() const noexcept
+    {
+        return view_;
+    }
+
+    [[nodiscard]] bool TransparentBackground() const noexcept
+    {
+        return transparentBackground_;
+    }
+
     // Toggles whole-window input pass-through. Never calls SetForegroundWindow.
     void SetClickThrough(bool enabled);
     void ToggleClickThrough();
@@ -188,6 +199,10 @@ class OverlayWindow
     void NotifyVisibilityChanged();
     [[nodiscard]] unsigned WindowDpi() const;
     [[nodiscard]] HMONITOR CurrentMonitor() const;
+    // Refresh rate (Hz) of the current monitor, or a sane fallback when it cannot be queried.
+    [[nodiscard]] double CurrentRefreshHz() const;
+    // Pushes the current monitor refresh rate to the renderer (FPS gauge scaling).
+    void UpdateTargetFps();
     [[nodiscard]] pacecar::MonitorRect PlacementFor(
         const std::optional<pacecar::MonitorRect>& saved, unsigned dpi);
     [[nodiscard]] DWORD RecipeExtendedStyle(OverlayRecipe recipe) const;
@@ -196,6 +211,9 @@ class OverlayWindow
     HWND hwnd_ = nullptr;
     OverlayOptions options_{};
     std::unique_ptr<IRenderer> renderer_;
+    // Last applied config-driven layout; used to enforce a view-aware minimum window size.
+    LayoutSettings layoutSettings_{};
+    pacecar::ViewMode view_ = pacecar::ViewMode::Full;
     bool clickThrough_ = true;
     bool transparentBackground_ = false;
     bool captureExclusionApplied_ = false;

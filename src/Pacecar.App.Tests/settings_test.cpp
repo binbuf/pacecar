@@ -244,6 +244,21 @@ TEST(SettingsBinding, MapsViewBackgroundAndExtraHotkeys)
     EXPECT_TRUE(config.hotkeys.toggle_background.empty());
 }
 
+TEST(SettingsBinding, ClampsStatTextSize)
+{
+    Config config = MakeConfig();
+    SettingsBinding binding(config, [] {});
+
+    binding.SetStatTextSize(20);
+    EXPECT_EQ(config.general.stat_text_size, 20);
+    EXPECT_EQ(binding.StatTextSize(), 20);
+
+    binding.SetStatTextSize(999);
+    EXPECT_EQ(config.general.stat_text_size, pacecar::overlay::kStatTextSizeMax);
+    binding.SetStatTextSize(0);
+    EXPECT_EQ(config.general.stat_text_size, pacecar::overlay::kStatTextSizeMin);
+}
+
 TEST(SettingsBinding, RapidEditsProduceASingleDebouncedSave)
 {
     Config config = MakeConfig();

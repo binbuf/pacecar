@@ -20,5 +20,10 @@ struct WidgetStyles
     std::uint32_t primaryLarge = 0;
     std::uint32_t primaryXl = 0;
     std::uint32_t secondaryLarge = 0;
+    // The StatRows view's icon, label (truncation cue) and value formats. Registering these is
+    // driven by the configurable value font size, so their ids change whenever the size changes.
+    std::uint32_t statIcon = 0;
+    std::uint32_t statLabel = 0;
+    std::uint32_t statValue = 0;
 };
 } // namespace pacecar::overlay

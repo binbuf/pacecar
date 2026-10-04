@@ -24,13 +24,17 @@ namespace pacecar::overlay
 {
 // Option tables shared by the combo boxes and the tests. The order is the display order.
 inline constexpr std::array<int, 5> kRefreshOptions{250, 500, 1000, 2000, 5000};
+// Allowed value font size range (DIPs) for the text views; the slider and the binding share it.
+inline constexpr int kStatTextSizeMin = 8;
+inline constexpr int kStatTextSizeMax = 28;
 inline constexpr std::array<int, 7> kRetentionOptions{1, 5, 10, 15, 30, 60, 120};
 inline constexpr std::array<Theme, 3> kThemeOptions{Theme::Dark, Theme::Light, Theme::HighContrast};
 inline constexpr std::array<LayoutPreset, 4> kLayoutOptions{
     LayoutPreset::Compact3x3, LayoutPreset::Vertical1x6, LayoutPreset::AutoFit,
     LayoutPreset::Custom};
-inline constexpr std::array<ViewMode, 4> kViewOptions{ViewMode::Full, ViewMode::LargeVisuals,
-                                                      ViewMode::SmallText, ViewMode::FpsOnly};
+inline constexpr std::array<ViewMode, 5> kViewOptions{
+    ViewMode::Full, ViewMode::LargeVisuals, ViewMode::SmallText, ViewMode::StatRows,
+    ViewMode::FpsOnly};
 inline constexpr std::array<OverlayMode, 2> kOverlayModeOptions{OverlayMode::Interactive,
                                                                 OverlayMode::ClickThrough};
 inline constexpr std::array<Visualization, 2> kVisualizationOptions{Visualization::Gauges,
@@ -137,6 +141,9 @@ class SettingsBinding
     void SetLayoutIndex(int index) noexcept;
     [[nodiscard]] int ViewIndex() const noexcept;
     void SetViewIndex(int index) noexcept;
+    // Value font size (DIPs) for the text views. Repaired to the allowed range on set.
+    [[nodiscard]] int StatTextSize() const noexcept;
+    void SetStatTextSize(int size) noexcept;
     [[nodiscard]] bool TransparentBackground() const noexcept;
     void SetTransparentBackground(bool enabled);
     [[nodiscard]] bool StartWithWindows() const noexcept;

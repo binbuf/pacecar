@@ -9,7 +9,7 @@ namespace pacecar::overlay
 {
 namespace
 {
-constexpr float kRadiusFraction = 0.40f;
+constexpr float kRadiusFraction = 0.46f;
 constexpr float kStrokeFraction = 0.08f;
 constexpr float kMinRadius = 1.0f;
 

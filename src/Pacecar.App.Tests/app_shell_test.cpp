@@ -168,7 +168,7 @@ TEST(OverlayCommands, TrayMenuExposesFullSet)
     using pacecar::overlay::OverlayCommand;
 
     const std::array<OverlayCommand, 10> expected{OverlayCommand::ToggleVisibility,
-                                                  OverlayCommand::CycleView,
+                                                  OverlayCommand::View,
                                                   OverlayCommand::ToggleBackground,
                                                   OverlayCommand::Mode,
                                                   OverlayCommand::Settings,

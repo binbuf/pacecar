@@ -61,15 +61,18 @@ enum class LayoutPreset
 //   Full         - the full panel: header plus the configured tiles and their visuals.
 //   LargeVisuals - fewer, larger tiles; values are placed inside/around their gauge or graph.
 //   SmallText    - a compact text-only readout (label + value per metric, no visuals).
+//   StatRows     - the simplest readout: one plain text line per visible stat, stacked top to
+//                  bottom, with no tile chrome or visuals. The value font size is user-adjustable.
 //   FpsOnly      - just the FPS / frame-time text readout.
 //
-// The two text views (`SmallText`, `FpsOnly`) look best with the panel background turned off, so
-// the overlay reads as plain text over the desktop/game.
+// The text views (`SmallText`, `StatRows`, `FpsOnly`) look best with the panel background turned
+// off, so the overlay reads as plain text over the desktop/game.
 enum class ViewMode
 {
     Full = 0,
     LargeVisuals,
     SmallText,
+    StatRows,
     FpsOnly,
 };
 
@@ -130,14 +133,23 @@ struct TileConfig
     bool mini_sparklines = false;
 };
 
+// Rate-based tiles (network/disk/ping) have no percentage to show in a gauge, so they default to a
+// text-only presentation instead of an empty arc.
+[[nodiscard]] inline TileConfig TextOnlyTile()
+{
+    TileConfig tile{};
+    tile.show_visualization = false;
+    return tile;
+}
+
 struct TilesConfig
 {
     TileConfig cpu{};
     TileConfig ram{};
     TileConfig gpu{};
-    TileConfig network{};
-    TileConfig disk{};
-    TileConfig ping{};
+    TileConfig network = TextOnlyTile();
+    TileConfig disk = TextOnlyTile();
+    TileConfig ping = TextOnlyTile();
     // Opt-in FPS / frame-time tile (task T17). Hidden by default and shown by the overlay only
     // while a capture is active.
     TileConfig fps{false};
@@ -168,8 +180,12 @@ struct GeneralConfig
     double opacity = 0.65;
     Theme theme = Theme::Dark;
     LayoutPreset layout = LayoutPreset::Compact3x3;
-    // The active presentation view (cycled at runtime via menu/hotkey).
-    ViewMode view = ViewMode::Full;
+    // The active presentation view (cycled at runtime via menu/hotkey). Defaults to the plain
+    // StatRows text list so a fresh install reads as a minimal, background-free readout.
+    ViewMode view = ViewMode::StatRows;
+    // Value font size for the text views, in device-independent pixels. Small by default so the
+    // StatRows view reads as a discreet list; adjustable live from Settings. Clamped by `Clamp()`.
+    int stat_text_size = 9;
     // When true the panel/header background is not drawn, so the overlay is just text (and, in the
     // visual views, the accent drawings) floating over the desktop/game.
     bool transparent_background = false;
@@ -224,8 +240,8 @@ struct HotkeysConfig
 {
     std::string toggle_overlay = "Ctrl+Shift+P";
     std::string toggle_click_through = "";
-    // Cycles Full -> LargeVisuals -> SmallText -> FpsOnly. Empty disables the binding.
-    std::string cycle_view = "Ctrl+Shift+V";
+    // Cycles Full -> LargeVisuals -> SmallText -> StatRows -> FpsOnly. Empty disables the binding.
+    std::string cycle_view = "Alt+F12";
     // Toggles the panel background on/off. Empty disables the binding.
     std::string toggle_background = "Ctrl+Shift+B";
 };

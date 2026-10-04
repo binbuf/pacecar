@@ -20,7 +20,7 @@ const ColorF kShadowColor{0.0f, 0.0f, 0.0f, 0.7f};
 RectF GaugeInnerRect(const RectF& visualization) noexcept
 {
     const float side = std::min(visualization.Width(), visualization.Height());
-    const float inner = side * 0.70f;
+    const float inner = side * 0.82f;
     const float centerX = (visualization.left + visualization.right) * 0.5f;
     const float centerY = (visualization.top + visualization.bottom) * 0.5f;
     return RectF{centerX - inner * 0.5f, centerY - inner * 0.5f, centerX + inner * 0.5f,

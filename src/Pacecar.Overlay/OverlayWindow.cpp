@@ -54,6 +54,43 @@ BOOL CALLBACK EnumMonitorProc(HMONITOR monitor, HDC /*hdc*/, LPRECT /*rect*/, LP
     return TRUE;
 }
 
+// Appends the "View" popup with a radio check on the active view. Returns false on failure.
+bool AppendViewSubmenu(HMENU menu, pacecar::ViewMode current)
+{
+    HMENU sub = CreatePopupMenu();
+    if (sub == nullptr)
+    {
+        return false;
+    }
+    for (const OverlayCommand command : kViewMenuCommands)
+    {
+        if (AppendMenuW(sub, MF_STRING, static_cast<UINT_PTR>(command), CommandLabel(command)) ==
+            FALSE)
+        {
+            DestroyMenu(sub);
+            return false;
+        }
+    }
+    UINT radioIndex = 0;
+    const OverlayCommand active = CommandForViewMode(current);
+    for (std::size_t i = 0; i < kViewMenuCommands.size(); ++i)
+    {
+        if (kViewMenuCommands[i] == active)
+        {
+            radioIndex = static_cast<UINT>(i);
+            break;
+        }
+    }
+    CheckMenuRadioItem(sub, 0, static_cast<UINT>(kViewMenuCommands.size() - 1), radioIndex,
+                       MF_BYPOSITION);
+    if (AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(sub), L"View") == FALSE)
+    {
+        DestroyMenu(sub);
+        return false;
+    }
+    return true;
+}
+
 bool EnsureWindowClass(HINSTANCE instance)
 {
     if (g_windowClass != 0)
@@ -215,6 +252,7 @@ bool OverlayWindow::InitializeRenderer(OverlayRecipe recipe, const pacecar::Moni
         return false;
     }
     renderer_->SetTheme(ResolveSystemTheme(options_.theme, options_.panelOpacity));
+    UpdateTargetFps();
     renderer_->Invalidate();
     const PresentResult presented = renderer_->Present();
     if (FAILED(presented.hr))
@@ -360,16 +398,53 @@ void OverlayWindow::ApplyConfig(const pacecar::Config& config)
     options_.theme = config.general.theme;
     options_.alwaysOnTop = config.overlay.always_on_top;
     transparentBackground_ = config.general.transparent_background;
+    view_ = config.general.view;
     if (renderer_ == nullptr)
     {
         return;
     }
+    layoutSettings_ = LayoutSettingsFromConfig(config);
     renderer_->SetTheme(ResolveSystemTheme(options_.theme, options_.panelOpacity));
-    renderer_->SetLayout(LayoutSettingsFromConfig(config));
+    renderer_->SetLayout(layoutSettings_);
+    UpdateTargetFps();
     SetClickThrough(config.overlay.mode == pacecar::OverlayMode::ClickThrough);
     ReassertTopmost();
     ApplyCaptureExclusion(config.overlay.capture_exclusion);
     Invalidate();
+}
+
+double OverlayWindow::CurrentRefreshHz() const
+{
+    // Prefer the current monitor's device name so a secondary high-refresh display scales the gauge
+    // correctly; fall back to the primary display, then 60 Hz.
+    MONITORINFOEXW info{};
+    info.cbSize = sizeof(info);
+    const HMONITOR monitor = MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST);
+    if (monitor != nullptr && GetMonitorInfoW(monitor, &info))
+    {
+        DEVMODEW mode{};
+        mode.dmSize = sizeof(mode);
+        if (EnumDisplaySettingsW(info.szDevice, ENUM_CURRENT_SETTINGS, &mode) &&
+            mode.dmDisplayFrequency > 1)
+        {
+            return static_cast<double>(mode.dmDisplayFrequency);
+        }
+    }
+    DEVMODEW mode{};
+    mode.dmSize = sizeof(mode);
+    if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &mode) && mode.dmDisplayFrequency > 1)
+    {
+        return static_cast<double>(mode.dmDisplayFrequency);
+    }
+    return 60.0;
+}
+
+void OverlayWindow::UpdateTargetFps()
+{
+    if (renderer_ != nullptr)
+    {
+        renderer_->SetTargetFps(CurrentRefreshHz());
+    }
 }
 
 void OverlayWindow::SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame)
@@ -452,6 +527,7 @@ void OverlayWindow::OnDisplayChange()
             ResizeRendererToWindow();
         }
     }
+    UpdateTargetFps();
     PublishPlacement();
 }
 
@@ -496,6 +572,56 @@ LRESULT OverlayWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
             return 0;
         }
         break;
+    case WM_GETMINMAXINFO: {
+        // Never let the overlay shrink below the active view's content size; without this the user
+        // could resize the panel to a few pixels and the tiles would degenerate.
+        auto* info = reinterpret_cast<MINMAXINFO*>(lParam);
+        const unsigned dpi = WindowDpi();
+        const TileSize minimum = MeasureLayout(layoutSettings_);
+        info->ptMinTrackSize.x = std::max<LONG>(DipToPixels(minimum.width, dpi), 48);
+        info->ptMinTrackSize.y = std::max<LONG>(DipToPixels(minimum.height, dpi), 40);
+        return 0;
+    }
+    case WM_SETCURSOR: {
+        // The window has no frame, so without an explicit cursor there is no affordance that the
+        // body drags and the edges resize.
+        if (clickThrough_)
+        {
+            break;
+        }
+        const WORD hit = LOWORD(lParam);
+        LPCWSTR cursor = nullptr;
+        switch (hit)
+        {
+        case HTCAPTION:
+            cursor = IDC_SIZEALL;
+            break;
+        case HTLEFT:
+        case HTRIGHT:
+            cursor = IDC_SIZEWE;
+            break;
+        case HTTOP:
+        case HTBOTTOM:
+            cursor = IDC_SIZENS;
+            break;
+        case HTTOPLEFT:
+        case HTBOTTOMRIGHT:
+            cursor = IDC_SIZENWSE;
+            break;
+        case HTTOPRIGHT:
+        case HTBOTTOMLEFT:
+            cursor = IDC_SIZENESW;
+            break;
+        default:
+            break;
+        }
+        if (cursor != nullptr)
+        {
+            SetCursor(LoadCursorW(nullptr, cursor));
+            return TRUE;
+        }
+        break;
+    }
     case WM_NCHITTEST:
         if (renderer_ != nullptr && renderer_->Recipe() == OverlayRecipe::Composition &&
             clickThrough_ &&
@@ -717,11 +843,16 @@ pacecar::MonitorRect OverlayWindow::PlacementFor(const std::optional<pacecar::Mo
         const MonitorWorkArea* primary = PrimaryMonitor(monitors_);
         const int width = DipToPixels(options_.defaultWidthDip, dpi);
         const int height = DipToPixels(options_.defaultHeightDip, dpi);
-        const int margin = DipToPixels(24.0f, dpi);
-        const int left = primary != nullptr ? primary->workArea.left : 0;
-        const int top = primary != nullptr ? primary->workArea.top : 0;
-        desired =
-            IntRect{left + margin, top + margin, left + margin + width, top + margin + height};
+        const int margin = 0;
+        if (primary != nullptr)
+        {
+            // A fresh overlay appears flush against the top-right corner of the primary monitor.
+            desired = TopRightPlacement(*primary, width, height, margin);
+        }
+        else
+        {
+            desired = IntRect{margin, margin, margin + width, margin + height};
+        }
     }
 
     const IntRect clamped = ClampToWorkArea(desired, monitors_);
@@ -817,6 +948,21 @@ void OverlayWindow::ShowContextMenu(POINT screenPoint)
     }
     for (const OverlayCommand command : kContextMenuCommands)
     {
+        // Group the menu: view controls, windows, capture, then lifecycle.
+        if (command == OverlayCommand::Settings || command == OverlayCommand::ToggleFrameCapture ||
+            command == OverlayCommand::Hide)
+        {
+            AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        }
+        if (command == OverlayCommand::View)
+        {
+            if (!AppendViewSubmenu(menu, view_))
+            {
+                DestroyMenu(menu);
+                return;
+            }
+            continue;
+        }
         UINT flags = MF_STRING;
         if (command == OverlayCommand::Mode && clickThrough_)
         {
@@ -834,10 +980,15 @@ void OverlayWindow::ShowContextMenu(POINT screenPoint)
         }
     }
 
+    // The overlay is WS_EX_NOACTIVATE and is never the foreground window; without this the menu can
+    // fail to dismiss when the user clicks elsewhere (the same fix the tray uses). The window is
+    // still not activated, so focus is not stolen from the game/app underneath.
+    SetForegroundWindow(hwnd_);
     const UINT chosen =
         static_cast<UINT>(TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
                                          screenPoint.x, screenPoint.y, 0, hwnd_, nullptr));
     DestroyMenu(menu);
+    PostMessageW(hwnd_, WM_NULL, 0, 0);
     if (chosen != 0 && IsOverlayCommand(chosen))
     {
         ExecuteCommand(static_cast<OverlayCommand>(chosen));
@@ -865,6 +1016,11 @@ void OverlayWindow::ExecuteCommand(OverlayCommand command)
     case OverlayCommand::ToggleFrameCapture:
     case OverlayCommand::CycleView:
     case OverlayCommand::ToggleBackground:
+    case OverlayCommand::ViewFull:
+    case OverlayCommand::ViewLargeVisuals:
+    case OverlayCommand::ViewSmallText:
+    case OverlayCommand::ViewStatRows:
+    case OverlayCommand::ViewFpsOnly:
         if (commandCallback_)
         {
             commandCallback_(command);

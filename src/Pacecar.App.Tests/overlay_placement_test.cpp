@@ -21,6 +21,7 @@ using pacecar::overlay::NormalizeDpi;
 using pacecar::overlay::PixelsToDip;
 using pacecar::overlay::PrimaryMonitor;
 using pacecar::overlay::ScaleRectForDpi;
+using pacecar::overlay::TopRightPlacement;
 
 // A two-monitor layout: a 1920x1080 primary at the origin and a 2560x1440 secondary to its right.
 // Work areas exclude a 40 px taskbar on the primary.
@@ -147,6 +148,24 @@ TEST(OverlayPlacement, NearestMonitorTieAndPrimarySelection)
     };
     EXPECT_EQ(PrimaryMonitor(noPrimary)->deviceName, L"\\\\.\\DISPLAY1");
     EXPECT_EQ(PrimaryMonitor({}), nullptr);
+}
+
+TEST(OverlayPlacement, TopRightPlacementAnchorsToWorkAreaCorner)
+{
+    const MonitorWorkArea monitor{L"\\\\.\\DISPLAY1", IntRect{0, 0, 1920, 1040}, 96, true};
+    const IntRect placed = TopRightPlacement(monitor, 320, 200, 24);
+    EXPECT_EQ(placed, IntRect(1576, 24, 1896, 224));
+    // The result is already sufficiently visible, so the clamp leaves it untouched.
+    EXPECT_EQ(ClampToWorkArea(placed, {monitor}), placed);
+
+    // A monitor offset in the virtual desktop anchors to its own top-right.
+    const MonitorWorkArea secondary{L"\\\\.\\DISPLAY2", IntRect{1920, 0, 4480, 1440}, 96, false};
+    EXPECT_EQ(TopRightPlacement(secondary, 320, 200, 24), IntRect(4136, 24, 4456, 224));
+
+    // Invalid sizes or an empty work area yield an empty rectangle.
+    EXPECT_TRUE(TopRightPlacement(monitor, 0, 200, 24).IsEmpty());
+    EXPECT_TRUE(TopRightPlacement(monitor, 320, -1, 24).IsEmpty());
+    EXPECT_TRUE(TopRightPlacement(MonitorWorkArea{}, 320, 200, 24).IsEmpty());
 }
 
 TEST(OverlayPlacement, NormalizeDpiRejectsAbsurdValues)

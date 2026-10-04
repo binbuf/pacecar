@@ -1,6 +1,7 @@
 #include "Tray.h"
 
 #include <algorithm>
+#include <cstddef>
 
 #include <shellapi.h>
 
@@ -14,6 +15,43 @@ constexpr wchar_t kTrayWindowClass[] = L"PacecarTrayWindow";
 constexpr std::size_t kTooltipCapacity = 127;
 
 ATOM g_trayClass = 0;
+
+// Appends the "View" popup with a radio check on the active view. Returns false on failure.
+bool AppendViewSubmenu(HMENU menu, pacecar::ViewMode current)
+{
+    HMENU sub = CreatePopupMenu();
+    if (sub == nullptr)
+    {
+        return false;
+    }
+    for (const OverlayCommand command : kViewMenuCommands)
+    {
+        if (AppendMenuW(sub, MF_STRING, static_cast<UINT_PTR>(command), CommandLabel(command)) ==
+            FALSE)
+        {
+            DestroyMenu(sub);
+            return false;
+        }
+    }
+    UINT radioIndex = 0;
+    const OverlayCommand active = CommandForViewMode(current);
+    for (std::size_t i = 0; i < kViewMenuCommands.size(); ++i)
+    {
+        if (kViewMenuCommands[i] == active)
+        {
+            radioIndex = static_cast<UINT>(i);
+            break;
+        }
+    }
+    CheckMenuRadioItem(sub, 0, static_cast<UINT>(kViewMenuCommands.size() - 1), radioIndex,
+                       MF_BYPOSITION);
+    if (AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(sub), L"View") == FALSE)
+    {
+        DestroyMenu(sub);
+        return false;
+    }
+    return true;
+}
 
 bool EnsureTrayClass(HINSTANCE instance)
 {
@@ -133,6 +171,21 @@ void Tray::ShowMenu(POINT screenPoint)
 
     for (const OverlayCommand command : kTrayMenuCommands)
     {
+        // Group the menu: show/hide, view controls, windows, capture/output, lifecycle.
+        if (command == OverlayCommand::View || command == OverlayCommand::Settings ||
+            command == OverlayCommand::CopySystemInfo || command == OverlayCommand::Exit)
+        {
+            AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        }
+        if (command == OverlayCommand::View)
+        {
+            if (!AppendViewSubmenu(menu, view_))
+            {
+                DestroyMenu(menu);
+                return;
+            }
+            continue;
+        }
         UINT flags = MF_STRING;
         if (command == OverlayCommand::Mode && clickThrough_)
         {

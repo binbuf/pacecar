@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cwchar>
 #include <span>
 #include <string_view>
 
@@ -14,6 +15,11 @@ namespace pacecar::overlay
 namespace
 {
 constexpr float kCornerRadius = 6.0f;
+
+// The StatRows view draws plain text with a soft drop shadow when the panel background is off, so
+// the list stays legible over arbitrary desktop/game content (mirrors Tile.cpp).
+constexpr float kStatShadowOffset = 1.0f;
+const ColorF kStatShadowColor{0.0f, 0.0f, 0.0f, 0.7f};
 
 // Neutral placeholders shown before the first sample (cold start) or when a metric is unavailable.
 // Labels and families are real so the layout and arrangement can be checked by eye.
@@ -97,10 +103,32 @@ const wchar_t* LabelFor(TileId id) noexcept
     }
 }
 
-float DemoWave(std::size_t index) noexcept
+// The StatRows header glyph for one stat, drawn from "Segoe MDL2 Assets" (code points in the font's
+// private-use area). Kept as fixed-width glyphs so the value column lines up flush.
+wchar_t IconFor(TileId id) noexcept
 {
-    const float t = static_cast<float>(index) / static_cast<float>(kSparklineCapacity);
-    return 50.0f + 35.0f * std::sin(t * 6.2831853f);
+    switch (id)
+    {
+    case TileId::Cpu:
+        return L'\xE950'; // Component
+    case TileId::Ram:
+        return L'\xE964'; // SmartcardVirtual
+    case TileId::Gpu:
+        return L'\xE7FC'; // Game
+    case TileId::Network:
+        return L'\xE968'; // Network
+    case TileId::Disk:
+        return L'\xEDA2'; // HardDrive
+    case TileId::Ping:
+        return L'\xE916'; // Stopwatch
+    case TileId::Fans:
+        return L'\xE72C'; // Refresh (spinning fan)
+    case TileId::Mainboard:
+        return L'\xE957'; // Sensor
+    case TileId::Fps:
+    default:
+        return L'\xEC4A'; // SpeedHigh
+    }
 }
 
 // Sparkline autoscale for a rate series: 0 at the bottom, the observed maximum (with a small head
@@ -113,6 +141,15 @@ float SeriesMaximum(std::span<const float> samples) noexcept
         maximum = std::max(maximum, value);
     }
     return maximum > 0.0f ? maximum : 1.0f;
+}
+
+// Smoothed scale for a rate series: snap up to a new observed maximum, then decay slowly so a
+// short spike does not permanently flatten the rest of the history. `scale` is persisted per tile.
+float SmoothedSeriesMaximum(float& scale, std::span<const float> samples) noexcept
+{
+    const float observed = SeriesMaximum(samples);
+    scale = observed >= scale ? observed : std::max(observed, scale * 0.92f);
+    return std::max(scale, 1.0f);
 }
 
 const pacecar::metrics::MetricSparkline* SparklineFor(const pacecar::metrics::DisplayFrame& frame,
@@ -143,18 +180,207 @@ bool Unavailable(const pacecar::metrics::MetricStatus& status) noexcept
 {
     return !status.available;
 }
+
+// Appends `piece` to the null-terminated `buffer`, separated from any prior piece by two spaces.
+void AppendStatPiece(wchar_t* buffer, std::size_t size, const wchar_t* piece) noexcept
+{
+    if (piece == nullptr || piece[0] == L'\0')
+    {
+        return;
+    }
+    if (buffer[0] != L'\0')
+    {
+        wcscat_s(buffer, size, L"  ");
+    }
+    wcscat_s(buffer, size, piece);
+}
+
+// Builds the single-line value shown for one stat in the StatRows view. Writes into `buffer` and
+// returns it as a view; an unavailable metric yields "--". `buffer` must hold at least 128 wchars.
+std::wstring_view FormatStatRow(TileId id, const pacecar::metrics::MetricsSnapshot& snapshot,
+                                wchar_t* buffer, std::size_t size) noexcept
+{
+    buffer[0] = L'\0';
+    wchar_t piece[48] = {};
+    std::span<wchar_t> slot(piece);
+
+    switch (id)
+    {
+    case TileId::Cpu: {
+        if (Unavailable(snapshot.cpu.status))
+        {
+            break;
+        }
+        static_cast<void>(pacecar::FormatPercent(slot, std::clamp(snapshot.cpu.totalUtilizationPercent, 0.0, 100.0)));
+        AppendStatPiece(buffer, size, piece);
+        if (snapshot.cpu.totalFrequencyMhz > 0.0)
+        {
+            static_cast<void>(pacecar::FormatFrequency(slot, snapshot.cpu.totalFrequencyMhz * 1.0e6));
+            AppendStatPiece(buffer, size, piece);
+        }
+        if (!Unavailable(snapshot.cpu.temperatureStatus) && snapshot.cpu.packageTemperatureC > 0.0)
+        {
+            static_cast<void>(pacecar::FormatTemperature(slot, snapshot.cpu.packageTemperatureC));
+            AppendStatPiece(buffer, size, piece);
+        }
+        break;
+    }
+    case TileId::Ram: {
+        if (Unavailable(snapshot.memory.status))
+        {
+            break;
+        }
+        static_cast<void>(pacecar::FormatPercent(slot, std::clamp(snapshot.memory.usedPercent, 0.0, 100.0)));
+        AppendStatPiece(buffer, size, piece);
+        wchar_t used[32] = {};
+        wchar_t total[32] = {};
+        static_cast<void>(pacecar::FormatBytes(std::span<wchar_t>(used), snapshot.memory.usedBytes));
+        static_cast<void>(
+            pacecar::FormatBytes(std::span<wchar_t>(total), snapshot.memory.totalBytes));
+        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%s / %s", used, total);
+        AppendStatPiece(buffer, size, piece);
+        break;
+    }
+    case TileId::Gpu: {
+        if (Unavailable(snapshot.gpu.status))
+        {
+            break;
+        }
+        static_cast<void>(pacecar::FormatPercent(slot, std::clamp(snapshot.gpu.utilizationPercent, 0.0, 100.0)));
+        AppendStatPiece(buffer, size, piece);
+        if (!Unavailable(snapshot.gpu.temperatureStatus) && snapshot.gpu.temperatureC > 0.0)
+        {
+            static_cast<void>(pacecar::FormatTemperature(slot, snapshot.gpu.temperatureC));
+            AppendStatPiece(buffer, size, piece);
+        }
+        if (snapshot.gpu.vramTotalBytes > 0)
+        {
+            wchar_t used[32] = {};
+            wchar_t total[32] = {};
+            static_cast<void>(
+                pacecar::FormatBytes(std::span<wchar_t>(used), snapshot.gpu.vramUsedBytes));
+            static_cast<void>(
+                pacecar::FormatBytes(std::span<wchar_t>(total), snapshot.gpu.vramTotalBytes));
+            _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%s / %s", used, total);
+            AppendStatPiece(buffer, size, piece);
+        }
+        break;
+    }
+    case TileId::Network: {
+        if (Unavailable(snapshot.network.status))
+        {
+            break;
+        }
+        wchar_t down[32] = {};
+        wchar_t up[32] = {};
+        static_cast<void>(pacecar::FormatRate(std::span<wchar_t>(down),
+                                              snapshot.network.downBytesPerSecond));
+        static_cast<void>(
+            pacecar::FormatRate(std::span<wchar_t>(up), snapshot.network.upBytesPerSecond));
+        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"\x2193 %s", down);
+        AppendStatPiece(buffer, size, piece);
+        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"\x2191 %s", up);
+        AppendStatPiece(buffer, size, piece);
+        break;
+    }
+    case TileId::Disk: {
+        if (Unavailable(snapshot.disk.status))
+        {
+            break;
+        }
+        wchar_t read[32] = {};
+        wchar_t write[32] = {};
+        static_cast<void>(
+            pacecar::FormatRate(std::span<wchar_t>(read), snapshot.disk.readBytesPerSecond));
+        static_cast<void>(
+            pacecar::FormatRate(std::span<wchar_t>(write), snapshot.disk.writeBytesPerSecond));
+        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"R %s", read);
+        AppendStatPiece(buffer, size, piece);
+        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"W %s", write);
+        AppendStatPiece(buffer, size, piece);
+        if (!Unavailable(snapshot.disk.temperatureStatus) && snapshot.disk.temperatureC > 0.0)
+        {
+            static_cast<void>(pacecar::FormatTemperature(slot, snapshot.disk.temperatureC));
+            AppendStatPiece(buffer, size, piece);
+        }
+        break;
+    }
+    case TileId::Ping: {
+        if (Unavailable(snapshot.ping.status))
+        {
+            break;
+        }
+        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%.0f ms", snapshot.ping.rttMs);
+        AppendStatPiece(buffer, size, piece);
+        break;
+    }
+    case TileId::Fps: {
+        if (Unavailable(snapshot.frame.status) || snapshot.frame.fps <= 0.0)
+        {
+            break;
+        }
+        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%.0f FPS", snapshot.frame.fps);
+        AppendStatPiece(buffer, size, piece);
+        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%.1f ms", snapshot.frame.frameTimeMs);
+        AppendStatPiece(buffer, size, piece);
+        break;
+    }
+    case TileId::Fans: {
+        if (Unavailable(snapshot.fan.status) || snapshot.fan.highestRpm <= 0)
+        {
+            break;
+        }
+        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%d RPM", snapshot.fan.highestRpm);
+        AppendStatPiece(buffer, size, piece);
+        break;
+    }
+    case TileId::Mainboard:
+    default: {
+        if (Unavailable(snapshot.board.status) || snapshot.board.mainboardTemperatureC <= 0.0)
+        {
+            break;
+        }
+        static_cast<void>(pacecar::FormatTemperature(slot, snapshot.board.mainboardTemperatureC));
+        AppendStatPiece(buffer, size, piece);
+        break;
+    }
+    }
+
+    if (buffer[0] == L'\0')
+    {
+        wcscpy_s(buffer, size, L"--");
+    }
+    return std::wstring_view(buffer);
+}
 } // namespace
 
-void WidgetScene::EnsureInitialized(ID2D1RenderTarget* target)
+void WidgetScene::EnsureInitialized(ID2D1RenderTarget* target, float statTextSizeDip)
 {
-    if (initialized_ || target == nullptr)
+    if (target == nullptr)
     {
         return;
     }
-    if (FAILED(text_.Initialize()) || !text_.Ready())
+    if (!initialized_)
     {
+        if (FAILED(text_.Initialize()) || !text_.Ready())
+        {
+            return;
+        }
+        initialized_ = true;
+        RegisterStyles(statTextSizeDip);
         return;
     }
+    if (statTextSizeDip != registeredStatTextSize_)
+    {
+        RegisterStyles(statTextSizeDip);
+    }
+}
+
+void WidgetScene::RegisterStyles(float statTextSizeDip)
+{
+    // Re-registering invalidates every format id held in `styles_`, so register them all again.
+    text_.Reset();
+    registeredStatTextSize_ = statTextSizeDip;
 
     TextStyle headerTitle{};
     headerTitle.family = L"Segoe UI";
@@ -177,7 +403,8 @@ void WidgetScene::EnsureInitialized(ID2D1RenderTarget* target)
 
     TextStyle primary{};
     primary.family = L"Consolas";
-    primary.sizeDip = 18.0f;
+    // Sized to sit inside a default (Compact 3x3) gauge without spilling over the arc.
+    primary.sizeDip = 14.0f;
     primary.weight = 700;
     primary.tabular = true;
     primary.align = TextAlign::Center;
@@ -206,11 +433,35 @@ void WidgetScene::EnsureInitialized(ID2D1RenderTarget* target)
     secondaryLarge.sizeDip = 11.0f;
     styles_.secondaryLarge = text_.RegisterFormat(secondaryLarge);
 
-    for (std::size_t i = 0; i < demoHistory_.size(); ++i)
-    {
-        demoHistory_[i] = DemoWave(i);
-    }
-    initialized_ = true;
+    // The StatRows view: a tabular value and a slightly smaller label, sized from config so the
+    // user can tune it live. Registered last so their ids change on every size change.
+    TextStyle statValue{};
+    statValue.family = L"Consolas";
+    statValue.sizeDip = statTextSizeDip;
+    statValue.weight = 600;
+    statValue.tabular = true;
+    // Values are left-aligned: the whole row is pushed against the right edge instead, so a change
+    // in digit count never shifts the value's starting position.
+    statValue.align = TextAlign::Leading;
+    styles_.statValue = text_.RegisterFormat(statValue);
+
+    TextStyle statLabel = statValue;
+    statLabel.family = L"Segoe UI";
+    statLabel.sizeDip = std::max(7.0f, statTextSizeDip * 0.9f);
+    statLabel.weight = 600;
+    statLabel.tabular = false;
+    statLabel.align = TextAlign::Leading;
+    styles_.statLabel = text_.RegisterFormat(statLabel);
+
+    // The StatRows "header" column is an icon from the Windows symbol font instead of a text label.
+    // Every MDL2 glyph shares one fixed advance width, so a single icon cell keeps the value columns
+    // flush regardless of which metric is shown.
+    TextStyle statIcon{};
+    statIcon.family = L"Segoe MDL2 Assets";
+    statIcon.sizeDip = std::max(8.0f, statTextSizeDip * 1.1f);
+    statIcon.weight = 400;
+    statIcon.align = TextAlign::Leading;
+    styles_.statIcon = text_.RegisterFormat(statIcon);
 }
 
 void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
@@ -224,14 +475,17 @@ void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
     {
         return;
     }
-    EnsureInitialized(target);
+    EnsureInitialized(target, settings_.statTextSize);
     if (!initialized_)
     {
         return;
     }
 
+    // High contrast must never rely on whatever is behind the text, so force an opaque panel even
+    // for views (StatRows) that normally omit it.
+    const bool paintBackground = settings_.drawBackground || theme.highContrast;
     const RectF bounds{0.0f, 0.0f, size.width, size.height};
-    if (settings_.drawBackground)
+    if (paintBackground)
     {
         panel_.Draw(target, bounds, kCornerRadius, theme.palette.panelBackground,
                     theme.palette.panelBorder);
@@ -245,7 +499,15 @@ void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
                                frame_->snapshot->frame.fps > 0.0;
     if (settings_.view != pacecar::ViewMode::FpsOnly)
     {
+        // Hide the FPS row/tile when no game is being captured or its value is not positive, so it
+        // never shows a stale or "--" readout. The FPS-only view always shows it.
         SetFrameCaptureTileVisible(settings_, captureActive);
+    }
+
+    if (settings_.view == pacecar::ViewMode::StatRows)
+    {
+        DrawStatRows(target, theme, !paintBackground);
+        return;
     }
 
     if (settings_.drawHeader)
@@ -300,6 +562,107 @@ void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
     }
 }
 
+void WidgetScene::DrawStatRows(ID2D1RenderTarget* target, const ResolvedTheme& theme, bool shadow)
+{
+    const D2D1_SIZE_F size = target->GetSize();
+    const float padding = settings_.panelPadding;
+    const float textSize = settings_.statTextSize > 1.0f ? settings_.statTextSize : 11.0f;
+    const float rowHeight = textSize * 1.7f;
+    const float left = padding;
+    const float right = size.width - padding;
+    const float bottom = size.height - padding * 0.5f;
+    if (right <= left || bottom <= padding)
+    {
+        return;
+    }
+
+    // Two columns per row: a fixed-width icon cell and a left-aligned value. Every icon shares one
+    // advance width, so the value column starts at a single x and all detail columns sit flush. The
+    // block is pushed as close to the right edge as it fits, hugging the top-right corner.
+    const bool haveFrame = frame_ && frame_->snapshot;
+    wchar_t buffer[128] = {};
+
+    float iconWidth = 0.0f;
+    float valueWidth = 0.0f;
+    for (std::size_t i = 0; i < kMaxTiles; ++i)
+    {
+        if (!settings_.tiles[i].visible)
+        {
+            continue;
+        }
+        const TileId id = static_cast<TileId>(i);
+        const wchar_t icon[2] = {IconFor(id), L'\0'};
+        iconWidth = std::max(iconWidth, text_.MeasureWidth(styles_.statIcon, icon));
+        const std::wstring_view value =
+            haveFrame ? FormatStatRow(id, *frame_->snapshot, buffer, std::size(buffer))
+                      : std::wstring_view(DemoFor(id).primary);
+        valueWidth = std::max(valueWidth, text_.MeasureWidth(styles_.statValue, value));
+    }
+
+    const float columnGap = 2.0f;
+    const float blockWidth = iconWidth + columnGap + valueWidth;
+    const float blockLeft = std::max(left, right - blockWidth);
+    const float valueLeft = blockLeft + iconWidth + columnGap;
+
+    ID2D1SolidColorBrush* shadowBrush =
+        shadow ? statShadowBrush_.Get(target, kStatShadowColor) : nullptr;
+
+    const auto drawRowText = [&](std::uint32_t style, std::wstring_view text, const RectF& rect,
+                                 ID2D1SolidColorBrush* brush) noexcept {
+        if (shadowBrush != nullptr)
+        {
+            const RectF shifted{rect.left + kStatShadowOffset, rect.top + kStatShadowOffset,
+                                rect.right + kStatShadowOffset, rect.bottom + kStatShadowOffset};
+            text_.DrawText(target, style, text, shifted, shadowBrush);
+        }
+        text_.DrawText(target, style, text, rect, brush);
+    };
+
+    float y = padding;
+    bool truncated = false;
+    for (std::size_t i = 0; i < kMaxTiles; ++i)
+    {
+        if (!settings_.tiles[i].visible)
+        {
+            continue;
+        }
+        if (y + rowHeight > bottom)
+        {
+            truncated = true;
+            break;
+        }
+        const TileId id = static_cast<TileId>(i);
+        const std::wstring_view value = haveFrame
+                                            ? FormatStatRow(id, *frame_->snapshot, buffer,
+                                                            std::size(buffer))
+                                            : std::wstring_view(DemoFor(id).primary);
+
+        const wchar_t icon[2] = {IconFor(id), L'\0'};
+        const RectF iconRect{blockLeft, y, blockLeft + iconWidth, y + rowHeight};
+        const RectF valueRect{valueLeft, y, right, y + rowHeight};
+        if (ID2D1SolidColorBrush* brush = statLabelBrush_.Get(target, theme.palette.textDim))
+        {
+            drawRowText(styles_.statIcon, icon, iconRect, brush);
+        }
+        if (ID2D1SolidColorBrush* brush = statValueBrush_.Get(target, theme.palette.text))
+        {
+            drawRowText(styles_.statValue, value, valueRect, brush);
+        }
+        y += rowHeight;
+    }
+
+    // Signal that more stats exist than the current height can show, instead of dropping them
+    // silently. Drawn in the value column just below the last row that fit.
+    if (truncated && y + textSize <= bottom + textSize)
+    {
+        const RectF moreRect{valueLeft, y, right, bottom};
+        if (ID2D1SolidColorBrush* brush = statLabelBrush_.Get(target, theme.palette.textDim))
+        {
+            drawRowText(styles_.statLabel, L"\x2026", moreRect, brush);
+        }
+    }
+}
+
 void WidgetScene::DrawDemoTile(ID2D1RenderTarget* target, const TilePlacement& placement,
                                std::size_t index, const WidgetStyles& styles,
                                const ResolvedTheme& theme)
@@ -315,7 +678,7 @@ void WidgetScene::DrawDemoTile(ID2D1RenderTarget* target, const TilePlacement& p
     content.gaugeFraction = demo.gauge;
     content.visualizationIsSparkline =
         placement.visualization == pacecar::Visualization::Sparklines;
-    content.sparkSamples = std::span<const float>(demoHistory_);
+    // No sparkline before the first sample: a fabricated curve would look like live data.
     content.sparkMin = 0.0f;
     content.sparkMax = 100.0f;
     content.shadow = !settings_.drawBackground;
@@ -462,7 +825,7 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
                              snapshot.frame.gpuTimeMs);
                 tertiaryView = std::wstring_view(tertiary.data());
             }
-            gauge = std::clamp(snapshot.frame.fps / 240.0, 0.0, 1.0);
+            gauge = std::clamp(snapshot.frame.fps / targetFps_, 0.0, 1.0);
         }
         else
         {
@@ -505,13 +868,10 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         if (placement.id == TileId::Network || placement.id == TileId::Disk ||
             placement.id == TileId::Ping || placement.id == TileId::Fps)
         {
-            sparkMax = SeriesMaximum(sparkSamples);
+            sparkMax = SmoothedSeriesMaximum(sparkScale_[index], sparkSamples);
         }
     }
-    else
-    {
-        sparkSamples = std::span<const float>(demoHistory_);
-    }
+    // No samples: leave the sparkline empty rather than drawing fabricated activity.
 
     TileContent content{};
     content.family = placement.family;

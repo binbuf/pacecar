@@ -78,6 +78,10 @@ struct LayoutSettings
     bool drawBackground = true;
     // Whether the "PACECAR" header band is reserved and drawn.
     bool drawHeader = true;
+    // Value font size (DIPs) for the text views, notably StatRows. The scene re-registers its text
+    // formats when this changes so the effect is visible live from Settings. Matches the config
+    // default (`GeneralConfig::stat_text_size`) so an unmapped scene reads the same as a loaded one.
+    float statTextSize = 9.0f;
 };
 
 // A placed tile: its identity, window-space rectangle (DIPs), and the resolved fields to draw.

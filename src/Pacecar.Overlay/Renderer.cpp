@@ -106,6 +106,12 @@ class LayeredRenderer final : public IRenderer
         dirty_ = true;
     }
 
+    void SetTargetFps(double fps) override
+    {
+        scene_.SetTargetFps(fps);
+        dirty_ = true;
+    }
+
     void SetFrame(std::shared_ptr<const pacecar::metrics::DisplayFrame> frame) override
     {
         scene_.SetFrame(std::move(frame));
@@ -409,6 +415,12 @@ class CompositionRenderer final : public IRenderer
     void SetLayout(const LayoutSettings& layout) override
     {
         scene_.SetLayout(layout);
+        dirty_ = true;
+    }
+
+    void SetTargetFps(double fps) override
+    {
+        scene_.SetTargetFps(fps);
         dirty_ = true;
     }
 

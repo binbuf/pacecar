@@ -11,6 +11,7 @@ using pacecar::overlay::ApplyOpacity;
 using pacecar::overlay::ColorF;
 using pacecar::overlay::DarkPalette;
 using pacecar::overlay::HighContrastPalette;
+using pacecar::overlay::LightPalette;
 using pacecar::overlay::MetricFamily;
 using pacecar::overlay::ResolveTheme;
 using pacecar::overlay::ThemeInputs;
@@ -24,6 +25,23 @@ TEST(Theme, DarkPaletteHasDistinctFamilyAccents)
     EXPECT_NE(palette.network, palette.disk);
     EXPECT_FLOAT_EQ(AccentFor(palette, MetricFamily::Cpu).r, palette.cpu.r);
     EXPECT_FLOAT_EQ(AccentFor(palette, MetricFamily::Disk).b, palette.disk.b);
+}
+
+TEST(Theme, LightThemeResolvesToLightPalette)
+{
+    ThemeInputs inputs{};
+    inputs.theme = pacecar::Theme::Light;
+    inputs.opacity = 0.8;
+    const auto resolved = ResolveTheme(inputs);
+    EXPECT_FALSE(resolved.highContrast);
+    // Light chrome: near-white panel and dark text, distinct from the dark palette.
+    EXPECT_GT(resolved.palette.panelBackground.r, 0.5f);
+    EXPECT_LT(resolved.palette.text.r, 0.5f);
+    EXPECT_NE(resolved.palette.cpu, DarkPalette().cpu);
+    EXPECT_FLOAT_EQ(resolved.palette.panelBackground.a, 0.8f);
+    // Family accents stay distinguishable.
+    EXPECT_NE(resolved.palette.cpu, resolved.palette.ram);
+    EXPECT_NE(resolved.palette.ram, resolved.palette.gpu);
 }
 
 TEST(Theme, OpacityScalesAlphaOnly)

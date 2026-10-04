@@ -261,6 +261,7 @@ TEST(Layout, HotPathPerformsZeroHeapAllocations)
 TEST(Layout, SettingsFromConfigMapsTogglesAndGeometry)
 {
     pacecar::Config config = pacecar::Config::Defaults();
+    config.general.view = ViewMode::Full;
     config.general.layout = LayoutPreset::Vertical1x6;
     config.tiles.cpu.show_secondary = false;
     config.tiles.ram.visible = false;
@@ -319,6 +320,27 @@ TEST(Layout, SmallTextViewIsTextOnlyAndCompact)
     ExpectNoOverlapAndContained(result, kWidth, kHeight);
 }
 
+TEST(Layout, StatRowsViewIsTextOnlyAndCarriesConfiguredTextSize)
+{
+    pacecar::Config config = pacecar::Config::Defaults();
+    config.general.view = ViewMode::StatRows;
+    config.general.stat_text_size = 15;
+    config.tiles.disk.visible = false;
+    const LayoutSettings settings = LayoutSettingsFromConfig(config);
+
+    EXPECT_FALSE(settings.drawHeader);
+    // The StatRows view is deliberately backgroundless: plain text over the desktop/game.
+    EXPECT_FALSE(settings.drawBackground);
+    EXPECT_NEAR(settings.statTextSize, 15.0f, 1e-3f);
+    EXPECT_FALSE(settings.tiles[static_cast<std::size_t>(TileId::Disk)].visible);
+    for (std::size_t i = 0; i < kMaxTiles; ++i)
+    {
+        EXPECT_FALSE(settings.tiles[i].fields.visualization) << "tile " << i;
+        EXPECT_FALSE(settings.tiles[i].fields.miniSparkline) << "tile " << i;
+        EXPECT_TRUE(settings.tiles[i].fields.primary) << "tile " << i;
+    }
+}
+
 TEST(Layout, LargeVisualsViewForcesVisualizationAndKeepsHeader)
 {
     pacecar::Config config = pacecar::Config::Defaults();
@@ -340,6 +362,7 @@ TEST(Layout, LargeVisualsViewForcesVisualizationAndKeepsHeader)
 TEST(Layout, TransparentBackgroundHidesPanelAndHeader)
 {
     pacecar::Config config = pacecar::Config::Defaults();
+    config.general.view = ViewMode::Full;
     config.general.transparent_background = true;
     const LayoutSettings settings = LayoutSettingsFromConfig(config);
 
@@ -347,7 +370,9 @@ TEST(Layout, TransparentBackgroundHidesPanelAndHeader)
     EXPECT_FALSE(settings.drawHeader);
 
     // Without the header the first tile starts higher than in the default (header) layout.
-    const LayoutSettings withHeader = LayoutSettingsFromConfig(pacecar::Config::Defaults());
+    pacecar::Config headedConfig = pacecar::Config::Defaults();
+    headedConfig.general.view = ViewMode::Full;
+    const LayoutSettings withHeader = LayoutSettingsFromConfig(headedConfig);
     const LayoutResult transparent = ComputeLayout(kWidth, kHeight, settings);
     const LayoutResult headed = ComputeLayout(kWidth, kHeight, withHeader);
     ASSERT_GT(transparent.count, 0u);
@@ -357,7 +382,7 @@ TEST(Layout, TransparentBackgroundHidesPanelAndHeader)
 
 TEST(OverlayCommands, MenuExposesAllRequiredCommandsInOrder)
 {
-    const std::array<OverlayCommand, 9> expected{OverlayCommand::CycleView,
+    const std::array<OverlayCommand, 9> expected{OverlayCommand::View,
                                                  OverlayCommand::ToggleBackground,
                                                  OverlayCommand::Mode,
                                                  OverlayCommand::Settings,
@@ -374,5 +399,21 @@ TEST(OverlayCommands, MenuExposesAllRequiredCommandsInOrder)
     }
     EXPECT_FALSE(IsOverlayCommand(0));
     EXPECT_FALSE(IsOverlayCommand(99));
+}
+
+TEST(OverlayCommands, ViewSubmenuMapsEachItemToItsView)
+{
+    EXPECT_EQ(pacecar::overlay::kViewMenuCommands.size(), 5u);
+    for (const OverlayCommand command : pacecar::overlay::kViewMenuCommands)
+    {
+        const auto view = pacecar::overlay::ViewModeForCommand(command);
+        ASSERT_TRUE(view.has_value());
+        EXPECT_EQ(pacecar::overlay::CommandForViewMode(*view), command);
+        EXPECT_GT(std::wcslen(pacecar::overlay::CommandLabel(command)), 0u);
+        EXPECT_TRUE(IsOverlayCommand(static_cast<unsigned>(command)));
+    }
+    // Non-view commands do not map to a view.
+    EXPECT_FALSE(pacecar::overlay::ViewModeForCommand(OverlayCommand::Mode).has_value());
+    EXPECT_FALSE(pacecar::overlay::ViewModeForCommand(OverlayCommand::View).has_value());
 }
 } // namespace

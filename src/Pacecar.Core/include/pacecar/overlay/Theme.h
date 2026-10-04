@@ -48,6 +48,10 @@ struct AccentPalette
 // ping teal, fans pink, mainboard gold. Panel background is a translucent near-black.
 [[nodiscard]] AccentPalette DarkPalette() noexcept;
 
+// The light palette: the same per-family accents darkened for contrast on a near-white panel, with
+// near-black text. Panel background is a translucent near-white.
+[[nodiscard]] AccentPalette LightPalette() noexcept;
+
 // High-Contrast palette. `lightBackground` selects black-on-white (true) or white-on-black (false)
 // chrome; every accent becomes the single accessible foreground so color never carries meaning.
 [[nodiscard]] AccentPalette HighContrastPalette(bool lightBackground) noexcept;

@@ -134,8 +134,37 @@ void TextRenderer::DrawText(ID2D1RenderTarget* target, std::uint32_t formatId,
     target->DrawTextLayout(D2D1::Point2F(x, y), layout, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
 }
 
+float TextRenderer::MeasureWidth(std::uint32_t formatId, std::wstring_view text)
+{
+    if (factory_ == nullptr || formats_.empty() || formatId >= formats_.size() ||
+        formats_[formatId] == nullptr)
+    {
+        return 0.0f;
+    }
+    IDWriteTextLayout* layout = layouts_.Get(formatId, text, [this, formatId, text]()
+                                             { return CreateLayout(formatId, text); })
+                                    .Get();
+    if (layout == nullptr)
+    {
+        return 0.0f;
+    }
+    DWRITE_TEXT_METRICS metrics{};
+    if (FAILED(layout->GetMetrics(&metrics)))
+    {
+        return 0.0f;
+    }
+    return metrics.width;
+}
+
 void TextRenderer::Trim()
 {
     layouts_.Clear();
+}
+
+void TextRenderer::Reset()
+{
+    layouts_.Clear();
+    formats_.clear();
+    styles_.clear();
 }
 } // namespace pacecar::overlay
