@@ -50,7 +50,7 @@ HRESULT SensorHelperProvider::Poll(MetricsSnapshot& snapshot)
     }
 
     static_cast<void>(client_->Pump(clock_()));
-    if (client_->Connected() && client_->HasFreshData())
+    if (sensorsEnabled_ && client_->Connected() && client_->HasFreshData())
     {
         client_->ApplyTo(snapshot);
         return S_OK;
@@ -58,6 +58,16 @@ HRESULT SensorHelperProvider::Poll(MetricsSnapshot& snapshot)
 
     client_->MarkUnavailable(snapshot);
     return E_FAIL;
+}
+
+void SensorHelperProvider::SetSensorsEnabled(bool enabled) noexcept
+{
+    sensorsEnabled_ = enabled;
+}
+
+bool SensorHelperProvider::SensorsEnabled() const noexcept
+{
+    return sensorsEnabled_;
 }
 
 void SensorHelperProvider::Reset() noexcept

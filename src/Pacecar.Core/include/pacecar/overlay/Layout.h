@@ -21,8 +21,9 @@
 namespace pacecar::overlay
 {
 // The maximum number of tiles the engine places. The first six map to `TilesConfig`; `Fans` and
-// `Mainboard` are reserved for later sensor work and default hidden.
-inline constexpr std::size_t kMaxTiles = 8;
+// `Mainboard` are reserved for later sensor work and default hidden. `Fps` (task T17) is shown
+// only while a frame-time capture is active.
+inline constexpr std::size_t kMaxTiles = 9;
 
 inline constexpr float kLayoutPanelPadding = 8.0f;
 inline constexpr float kLayoutHeaderHeight = 18.0f;
@@ -40,6 +41,7 @@ enum class TileId : std::uint8_t
     Ping,
     Fans,
     Mainboard,
+    Fps,
 };
 
 // The accent family for a tile (mirrors `MetricFamily`).
@@ -103,6 +105,10 @@ struct LayoutResult
 
 // Default settings: the six metric tiles visible with default fields; reserved families hidden.
 [[nodiscard]] LayoutSettings DefaultLayoutSettings() noexcept;
+
+// Forces the FPS tile's visibility to `active` (task T17). The FPS tile is capture-only, so the
+// overlay calls this every frame; the config's `tiles.fps.visible` is intentionally ignored.
+void SetFrameCaptureTileVisible(LayoutSettings& settings, bool active) noexcept;
 
 // Maps a `Config` (general preset, tiles toggles, custom geometry) into engine settings.
 [[nodiscard]] LayoutSettings LayoutSettingsFromConfig(const pacecar::Config& config) noexcept;

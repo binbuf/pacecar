@@ -43,6 +43,7 @@ const DemoTile& DemoFor(TileId id) noexcept
     static constexpr DemoTile kMainboard{L"--\x00B0"
                                          L"C",
                                          L"", L"", 0.0};
+    static constexpr DemoTile kFps{L"-- FPS", L"-- ms", L"", 0.0};
     switch (id)
     {
     case TileId::Cpu:
@@ -60,8 +61,10 @@ const DemoTile& DemoFor(TileId id) noexcept
     case TileId::Fans:
         return kFans;
     case TileId::Mainboard:
-    default:
         return kMainboard;
+    case TileId::Fps:
+    default:
+        return kFps;
     }
 }
 
@@ -84,8 +87,10 @@ const wchar_t* LabelFor(TileId id) noexcept
     case TileId::Fans:
         return L"Fans";
     case TileId::Mainboard:
-    default:
         return L"Board";
+    case TileId::Fps:
+    default:
+        return L"FPS";
     }
 }
 
@@ -124,6 +129,8 @@ const pacecar::metrics::MetricSparkline* SparklineFor(const pacecar::metrics::Di
         return &frame.disk;
     case TileId::Ping:
         return &frame.ping;
+    case TileId::Fps:
+        return &frame.fps;
     default:
         return nullptr;
     }
@@ -212,8 +219,19 @@ void WidgetScene::Draw(ID2D1RenderTarget* target, const ResolvedTheme& theme)
                            size.width - settings_.panelPadding,
                            settings_.panelPadding + settings_.headerHeight};
     const bool haveFrame = frame_ && frame_->snapshot;
+    // The FPS tile is drawn only while a capture is actually producing frames, and disappears
+    // again as soon as the capture stops (T17). Config cannot leave it visible otherwise.
+    const bool captureActive =
+        haveFrame && !Unavailable(frame_->snapshot->frame.status) &&
+        frame_->snapshot->frame.fps > 0.0;
+    SetFrameCaptureTileVisible(settings_, captureActive);
+
     const wchar_t* status = L"Live";
-    if (haveFrame && !frame_->snapshot->deepSensors.available)
+    if (captureActive)
+    {
+        status = L"FPS capture";
+    }
+    else if (haveFrame && !frame_->snapshot->deepSensors.available)
     {
         status = L"Deep sensors off";
     }
@@ -373,6 +391,31 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         gaugeValid = false;
         break;
     }
+    case TileId::Fps:
+    {
+        if (!Unavailable(snapshot.frame.status) && snapshot.frame.fps > 0.0)
+        {
+            _snwprintf_s(primary.data(), primary.size(), _TRUNCATE, L"%.0f FPS",
+                         snapshot.frame.fps);
+            primaryView = std::wstring_view(primary.data());
+            _snwprintf_s(secondary.data(), secondary.size(), _TRUNCATE, L"%.1f ms",
+                         snapshot.frame.frameTimeMs);
+            secondaryView = std::wstring_view(secondary.data());
+            if (snapshot.frame.gpuTimeMs > 0.0)
+            {
+                _snwprintf_s(tertiary.data(), tertiary.size(), _TRUNCATE, L"GPU %.1f ms",
+                             snapshot.frame.gpuTimeMs);
+                tertiaryView = std::wstring_view(tertiary.data());
+            }
+            gauge = std::clamp(snapshot.frame.fps / 240.0, 0.0, 1.0);
+        }
+        else
+        {
+            primaryView = L"-- FPS";
+            gaugeValid = false;
+        }
+        break;
+    }
     case TileId::Fans:
     {
         if (!Unavailable(snapshot.fan.status) && snapshot.fan.highestRpm > 0)
@@ -407,7 +450,7 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
     {
         sparkSamples = std::span<const float>(spark->samples, spark->count);
         if (placement.id == TileId::Network || placement.id == TileId::Disk ||
-            placement.id == TileId::Ping)
+            placement.id == TileId::Ping || placement.id == TileId::Fps)
         {
             sparkMax = SeriesMaximum(sparkSamples);
         }

@@ -119,6 +119,9 @@ struct TilesConfig
     TileConfig network{};
     TileConfig disk{};
     TileConfig ping{};
+    // Opt-in FPS / frame-time tile (task T17). Hidden by default and shown by the overlay only
+    // while a capture is active.
+    TileConfig fps{false};
 };
 
 // One tile's geometry for the Custom layout preset, in DIPs relative to the panel content origin
@@ -178,6 +181,9 @@ struct SensorsConfig
     // Opt-in deep sensors: when true the UI attempts to connect to the elevated Pacecar.Sensors
     // helper for package/board/DIMM/fan sensors. Default off; the UI stays unelevated regardless.
     bool deep_sensors = false;
+    // Opt-in FPS / frame-time capture via the helper's ETW session (task T17). Default off; capture
+    // never runs unless explicitly enabled and is shown only while active.
+    bool fps_capture = false;
     DiskTempMode disk_temp_mode = DiskTempMode::SelectedDisk;
     FanSpeedMode fan_mode = FanSpeedMode::Highest;
     MainboardTempMode mainboard_mode = MainboardTempMode::Highest;

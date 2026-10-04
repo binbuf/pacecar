@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "pacecar/metrics/FrameTimeProcessor.h"
 #include "pacecar/metrics/IpcProtocol.h"
 #include "pacecar/metrics/MetricsSnapshot.h"
 
@@ -79,6 +80,29 @@ class SensorHelperClient
     // The capability bitmask from the helper's HelloAck (0 when unknown).
     [[nodiscard]] std::uint32_t Capabilities() const noexcept;
 
+    // ---- Frame-time capture (task T17) --------------------------------------------------------
+    // Requests/stop an opt-in ETW capture for `pid`. Thread-safe: the desired state is latched and
+    // sent to the helper on the next `Pump` (and resent after every reconnect, because a fresh
+    // helper starts with no capture). Calling with `enabled=false` also clears the frame store.
+    void SetCaptureTarget(std::uint32_t pid, bool enabled);
+
+    [[nodiscard]] FrameCaptureState CaptureState() const noexcept;
+    [[nodiscard]] std::uint32_t CaptureTargetPid() const noexcept;
+    [[nodiscard]] bool CaptureRequested() const noexcept;
+
+    // True once at least one frame-time stats message has been decoded for the current connection.
+    [[nodiscard]] bool HasFreshFrameData() const noexcept;
+    [[nodiscard]] std::uint64_t FrameStatsCount() const noexcept;
+
+    // Moves all present events accumulated since the last call into `events` (swapping the internal
+// buffer) and reports the capture metadata. Returns the accumulated events even when several stats
+// messages arrived between polls, so no presents are dropped.
+    void TakeFrameData(std::vector<ipc::FrameEventPayload>& events,
+                       FrameCaptureState& state,
+                       std::uint32_t& targetPid,
+                       std::uint64_t& qpcFrequency,
+                       std::uint64_t& timestampMs);
+
     // Maps the latest readings into the snapshot. Only touches the fields the helper owns; leaves
     // the unprivileged baseline (for example the ACPI CPU temperature) intact when the helper has
     // no reading for it.
@@ -98,6 +122,8 @@ class SensorHelperClient
     bool ParseFrames();
     bool HandleMessage(const ipc::DecodedMessage& message);
     void SendHello();
+    void SendPendingCaptureCommand();
+    bool SendCaptureCommand(std::uint32_t command, std::uint32_t pid);
     void ClosePipeInternal();
     void ScheduleReconnectInternal(std::uint64_t nowMs) noexcept;
     bool ReadBytesInternal(std::size_t capacity);
@@ -115,6 +141,19 @@ class SensorHelperClient
 
     std::vector<std::uint8_t> rx_;
     std::vector<ipc::SensorReading> readings_;
+
+    // Frame-time capture state (task T17).
+    bool captureEnabled_ = false;
+    bool capturePending_ = false;
+    std::uint32_t capturePid_ = 0;
+    std::uint32_t commandSequence_ = 0;
+    FrameCaptureState frameState_ = FrameCaptureState::NotCapturing;
+    std::uint32_t frameTargetPid_ = 0;
+    std::uint64_t frameQpcFrequency_ = 0;
+    std::uint64_t frameTimestampMs_ = 0;
+    std::vector<ipc::FrameEventPayload> frameEvents_;
+    bool haveFrameData_ = false;
+    std::uint64_t frameStatsCount_ = 0;
 
     mutable std::mutex mutex_;
 };

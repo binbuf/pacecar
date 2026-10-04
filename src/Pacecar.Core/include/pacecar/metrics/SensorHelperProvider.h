@@ -46,8 +46,15 @@ class SensorHelperProvider final : public IMetricProvider
         return *client_;
     }
 
+    // Controls whether the provider actually writes deep-sensor readings. The sampler can keep the
+    // helper connection alive for frame-time capture (T17) while deep sensors are off; in that case
+    // the provider still pumps the pipe but reports the deep-sensor domain unavailable.
+    void SetSensorsEnabled(bool enabled) noexcept;
+    [[nodiscard]] bool SensorsEnabled() const noexcept;
+
   private:
     std::shared_ptr<SensorHelperClient> client_;
     Clock clock_;
+    bool sensorsEnabled_ = true;
 };
 } // namespace pacecar::metrics

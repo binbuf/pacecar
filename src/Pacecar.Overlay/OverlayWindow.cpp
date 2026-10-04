@@ -860,6 +860,7 @@ void OverlayWindow::ExecuteCommand(OverlayCommand command)
         break;
     case OverlayCommand::CopySystemInfo:
     case OverlayCommand::About:
+    case OverlayCommand::ToggleFrameCapture:
         if (commandCallback_)
         {
             commandCallback_(command);

@@ -22,6 +22,9 @@
   <ItemGroup>
     <!-- PawnIO-based LibreHardwareMonitor (MPL-2.0). Never WinRing0 (0.9.4 and earlier). -->
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+    <!-- Real-time ETW session control/consumption for the opt-in FPS capture (T17). The managed
+         wrapper avoids hand-rolled EVENT_TRACE_LOGFILE/EVENT_RECORD interop in an elevated process. -->
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.23" />
   </ItemGroup>
 
 </Project>

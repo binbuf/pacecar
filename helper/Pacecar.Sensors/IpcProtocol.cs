@@ -25,6 +25,30 @@ internal static class IpcProtocol
     public const int MessageKindHelloAck = 2;
     public const int MessageKindSensorSnapshot = 3;
     public const int MessageKindGoodbye = 4;
+    public const int MessageKindFrameTimeStats = 5;
+    public const int MessageKindFrameCaptureCommand = 6;
+
+    // Frame-time extension (task T17). Must match `Pacecar.Core/Metrics/IpcProtocol.h`.
+    public const int MaxFrameEvents = 120;
+    public const int FrameEventSize = 32;
+    public const int FrameTimeStatsFixedSize = 8 + 8 + 8 + 4 + 4 + 4 + 4;
+    public const int FrameTimeStatsPayloadSize = FrameTimeStatsFixedSize +
+                                                (FrameEventSize * MaxFrameEvents);
+    public const int FrameCaptureCommandPayloadSize = 8;
+
+    public const int FrameEventKindPresent = 1;
+
+    // Matches `pacecar::metrics::FrameCaptureState`.
+    public const uint CaptureStateNotCapturing = 0;
+    public const uint CaptureStateCapturing = 1;
+    public const uint CaptureStateSessionBusy = 2;
+    public const uint CaptureStateAccessDenied = 3;
+    public const uint CaptureStateProviderUnavailable = 4;
+    public const uint CaptureStateNoTarget = 5;
+    public const uint CaptureStateError = 6;
+
+    public const uint FrameCaptureCommandStop = 0;
+    public const uint FrameCaptureCommandStart = 1;
 
     public const ushort SensorIdUnknown = 0;
     public const ushort SensorIdCpuPackageTemperature = 1;
@@ -52,6 +76,10 @@ internal static class IpcProtocol
     }
 
     public readonly record struct Reading(ushort Id, bool Available, int Index, double Value);
+
+    /// <summary>One decoded present event (task T17). Durations are -1 when unknown.</summary>
+    public readonly record struct FrameEvent(ulong QpcTicks, long CpuTicks, long GpuTicks, uint Pid,
+                                             ushort Kind);
 
     private static void WriteHeader(Span<byte> buffer, int kind, int payloadLength, uint sequence,
                                     ulong timestampMs)
@@ -114,5 +142,59 @@ internal static class IpcProtocol
         }
 
         return message;
+    }
+
+    /// <summary>
+    /// Encodes an incremental batch of present events plus the current capture state. The native
+    /// side derives intervals/FPS from consecutive events, so the helper never sends the same event
+    /// twice.
+    /// </summary>
+    public static byte[] EncodeFrameTimeStats(IReadOnlyList<FrameEvent> events, uint captureState,
+                                              uint targetPid, ulong qpcFrequency, uint sequence,
+                                              ulong timestampMs)
+    {
+        var message = new byte[HeaderSize + FrameTimeStatsPayloadSize];
+        WriteHeader(message, MessageKindFrameTimeStats, FrameTimeStatsPayloadSize, sequence,
+                    timestampMs);
+
+        var payload = message.AsSpan(HeaderSize);
+        BinaryPrimitives.WriteUInt64LittleEndian(payload[0..], sequence);
+        BinaryPrimitives.WriteUInt64LittleEndian(payload[8..], timestampMs);
+        BinaryPrimitives.WriteUInt64LittleEndian(payload[16..], qpcFrequency);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload[24..], targetPid);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload[28..], captureState);
+
+        var count = (uint)Math.Min(events.Count, MaxFrameEvents);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload[32..], count);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload[36..], 0);
+
+        for (var i = 0; i < count; i++)
+        {
+            var offset = FrameTimeStatsFixedSize + (i * FrameEventSize);
+            var ev = events[i];
+            BinaryPrimitives.WriteUInt64LittleEndian(payload[offset..], ev.QpcTicks);
+            BinaryPrimitives.WriteInt64LittleEndian(payload[(offset + 8)..], ev.CpuTicks);
+            BinaryPrimitives.WriteInt64LittleEndian(payload[(offset + 16)..], ev.GpuTicks);
+            BinaryPrimitives.WriteUInt32LittleEndian(payload[(offset + 24)..], ev.Pid);
+            BinaryPrimitives.WriteUInt16LittleEndian(payload[(offset + 28)..], ev.Kind);
+            BinaryPrimitives.WriteUInt16LittleEndian(payload[(offset + 30)..], 0);
+        }
+
+        return message;
+    }
+
+    /// <summary>Decodes a client capture command; returns false for a malformed payload.</summary>
+    public static bool TryDecodeCaptureCommand(ReadOnlySpan<byte> payload, out uint command,
+                                               out uint targetPid)
+    {
+        command = 0;
+        targetPid = 0;
+        if (payload.Length != FrameCaptureCommandPayloadSize)
+        {
+            return false;
+        }
+        command = BinaryPrimitives.ReadUInt32LittleEndian(payload[0..]);
+        targetPid = BinaryPrimitives.ReadUInt32LittleEndian(payload[4..]);
+        return true;
     }
 }

@@ -42,6 +42,9 @@ struct DisplayFrame
     MetricSparkline network{};
     MetricSparkline disk{};
     MetricSparkline ping{};
+    // FPS tail (task T17). Populated only while a capture is active; the FPS tile is drawn only
+    // then, so an empty tail is never shown.
+    MetricSparkline fps{};
 };
 
 // Copies the newest up to `kDisplaySparklineSamples` samples of each history series (oldest first)

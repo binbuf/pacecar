@@ -115,7 +115,7 @@ void Sampler::BuildProviders(const pacecar::Config& config)
         pawnIoStatus_ = pacecar::metrics::DetectPawnIO(*source);
     }
 
-    aggregator_->ReserveProviders(8);
+    aggregator_->ReserveProviders(10);
     aggregator_->AddProvider(std::make_shared<pacecar::metrics::CpuProvider>());
     aggregator_->AddProvider(std::make_shared<pacecar::metrics::MemoryProvider>());
     gpuProvider_ = std::make_shared<pacecar::metrics::GpuPdhProvider>(
@@ -142,10 +142,21 @@ void Sampler::BuildProviders(const pacecar::Config& config)
     const std::wstring sid = pacecar::app::CurrentUserSid();
     helperClient_ = std::make_shared<pacecar::metrics::SensorHelperClient>(
         pacecar::metrics::SensorHelperClient::DefaultPipeName(sid));
-    helperClient_->SetEnabled(config.sensors.deep_sensors);
-    helperProvider_ = std::make_shared<pacecar::metrics::SensorHelperProvider>(helperClient_);
-    aggregator_->AddProvider(helperProvider_);
     deepSensorsEnabled_.store(config.sensors.deep_sensors);
+    frameCaptureEnabled_.store(config.sensors.fps_capture);
+    // The pipe is needed for either feature; the helper provider only *applies* deep sensors when
+    // the user enabled them, and the frame provider pulls the capture stream.
+    helperClient_->SetEnabled(config.sensors.deep_sensors || config.sensors.fps_capture);
+    helperProvider_ = std::make_shared<pacecar::metrics::SensorHelperProvider>(helperClient_);
+    helperProvider_->SetSensorsEnabled(config.sensors.deep_sensors);
+    aggregator_->AddProvider(helperProvider_);
+
+    frameProvider_ = std::make_shared<pacecar::metrics::FrameTimeProvider>(helperClient_);
+    aggregator_->AddProvider(frameProvider_);
+    if (config.sensors.fps_capture)
+    {
+        helperClient_->SetCaptureTarget(foregroundPid_.load(std::memory_order_relaxed), true);
+    }
 
     providerCount_ = aggregator_->ProviderCount();
 }
@@ -259,10 +270,14 @@ std::chrono::milliseconds Sampler::Interval() const noexcept
 
 void Sampler::SetForegroundPid(std::uint32_t pid) noexcept
 {
-    foregroundPid_.store(pid, std::memory_order_relaxed);
+    const std::uint32_t previous = foregroundPid_.exchange(pid, std::memory_order_relaxed);
     if (gpuProvider_)
     {
         gpuProvider_->SetTargetPid(pid);
+    }
+    if (helperClient_ && frameCaptureEnabled_.load(std::memory_order_relaxed) && pid != previous)
+    {
+        helperClient_->SetCaptureTarget(pid, true);
     }
 }
 
@@ -323,16 +338,55 @@ std::wstring Sampler::Diagnostics() const
 bool Sampler::SetDeepSensorsEnabled(bool enabled) noexcept
 {
     const bool changed = deepSensorsEnabled_.exchange(enabled) != enabled;
-    if (helperClient_)
+    if (helperProvider_)
     {
-        helperClient_->SetEnabled(enabled);
+        helperProvider_->SetSensorsEnabled(enabled);
     }
+    UpdateHelperEnabled();
     return changed;
 }
 
 bool Sampler::DeepSensorsEnabled() const noexcept
 {
     return deepSensorsEnabled_.load(std::memory_order_relaxed);
+}
+
+void Sampler::UpdateHelperEnabled() noexcept
+{
+    if (helperClient_)
+    {
+        helperClient_->SetEnabled(deepSensorsEnabled_.load(std::memory_order_relaxed) ||
+                                  frameCaptureEnabled_.load(std::memory_order_relaxed));
+    }
+}
+
+bool Sampler::SetFrameCaptureEnabled(bool enabled) noexcept
+{
+    const bool changed = frameCaptureEnabled_.exchange(enabled) != enabled;
+    if (changed && helperClient_)
+    {
+        helperClient_->SetCaptureTarget(foregroundPid_.load(std::memory_order_relaxed), enabled);
+    }
+    UpdateHelperEnabled();
+    return changed;
+}
+
+bool Sampler::FrameCaptureEnabled() const noexcept
+{
+    return frameCaptureEnabled_.load(std::memory_order_relaxed);
+}
+
+std::wstring Sampler::FrameCaptureStatus() const
+{
+    if (!frameCaptureEnabled_.load(std::memory_order_relaxed))
+    {
+        return L"off";
+    }
+    if (frameProvider_)
+    {
+        return frameProvider_->StatusLine();
+    }
+    return L"unavailable";
 }
 
 std::wstring Sampler::HelperStatus() const

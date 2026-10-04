@@ -86,6 +86,17 @@ internal static class NativeMethods
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr LocalFree(IntPtr memory);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PeekNamedPipe(IntPtr pipe, IntPtr buffer, uint bufferSize,
+                                            IntPtr bytesRead, out uint bytesAvailable,
+                                            IntPtr bytesLeftThisMessage);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ReadFile(IntPtr file, byte[] buffer, uint bytesToRead,
+                                       out uint bytesRead, IntPtr overlapped);
+
     public const uint GenericRead = 0x80000000;
     public const uint GenericWrite = 0x40000000;
     public const uint OpenExisting = 3;

@@ -169,10 +169,10 @@ TEST(OverlayCommands, TrayMenuExposesFullSet)
     using pacecar::overlay::IsOverlayCommand;
     using pacecar::overlay::OverlayCommand;
 
-    const std::array<OverlayCommand, 7> expected{
+    const std::array<OverlayCommand, 8> expected{
         OverlayCommand::ToggleVisibility, OverlayCommand::Mode, OverlayCommand::Settings,
-        OverlayCommand::History,          OverlayCommand::CopySystemInfo, OverlayCommand::About,
-        OverlayCommand::Exit};
+        OverlayCommand::History,          OverlayCommand::ToggleFrameCapture,
+        OverlayCommand::CopySystemInfo,   OverlayCommand::About, OverlayCommand::Exit};
     EXPECT_EQ(pacecar::overlay::kTrayMenuCommands, expected);
     for (const OverlayCommand command : pacecar::overlay::kTrayMenuCommands)
     {

@@ -48,6 +48,7 @@ SensorHelperClient::SensorHelperClient(std::wstring pipeName) : pipeName_(std::m
 {
     rx_.reserve(kMaxReceiveBytes);
     readings_.reserve(ipc::kMaxSensorReadings);
+    frameEvents_.reserve(ipc::kMaxFrameEvents * 8);
 }
 
 SensorHelperClient::~SensorHelperClient()
@@ -190,10 +191,117 @@ bool SensorHelperClient::TryConnectInternal()
     state_ = HelperState::Connected;
     haveData_ = false;
     capabilities_ = 0;
+    haveFrameData_ = false;
+    frameState_ = FrameCaptureState::NotCapturing;
+    frameEvents_.clear();
     rx_.clear();
     backoffMs_ = kInitialBackoffMs;
+    // A freshly connected helper has no capture; always (re)assert the desired state.
+    capturePending_ = captureEnabled_;
     SendHello();
+    SendPendingCaptureCommand();
     return pipe_ != nullptr;
+}
+
+void SensorHelperClient::SetCaptureTarget(std::uint32_t pid, bool enabled)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (captureEnabled_ == enabled && capturePid_ == pid)
+    {
+        return;
+    }
+    captureEnabled_ = enabled;
+    capturePid_ = pid;
+    capturePending_ = true;
+    if (!enabled)
+    {
+        frameState_ = FrameCaptureState::NotCapturing;
+        frameTargetPid_ = 0;
+        frameQpcFrequency_ = 0;
+        frameEvents_.clear();
+        haveFrameData_ = false;
+    }
+}
+
+FrameCaptureState SensorHelperClient::CaptureState() const noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return frameState_;
+}
+
+std::uint32_t SensorHelperClient::CaptureTargetPid() const noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return frameTargetPid_;
+}
+
+bool SensorHelperClient::CaptureRequested() const noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return captureEnabled_;
+}
+
+bool SensorHelperClient::HasFreshFrameData() const noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return haveFrameData_;
+}
+
+std::uint64_t SensorHelperClient::FrameStatsCount() const noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return frameStatsCount_;
+}
+
+void SensorHelperClient::TakeFrameData(std::vector<ipc::FrameEventPayload>& events,
+                                       FrameCaptureState& state,
+                                       std::uint32_t& targetPid,
+                                       std::uint64_t& qpcFrequency,
+                                       std::uint64_t& timestampMs)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    events.assign(frameEvents_.begin(), frameEvents_.end());
+    frameEvents_.clear();
+    state = frameState_;
+    targetPid = frameTargetPid_;
+    qpcFrequency = frameQpcFrequency_;
+    timestampMs = frameTimestampMs_;
+}
+
+void SensorHelperClient::SendPendingCaptureCommand()
+{
+    if (!capturePending_ || pipe_ == nullptr)
+    {
+        return;
+    }
+    const bool enabled = captureEnabled_;
+    const std::uint32_t pid = enabled ? capturePid_ : 0;
+    const auto command = enabled ? ipc::FrameCaptureCommand::Start : ipc::FrameCaptureCommand::Stop;
+    if (SendCaptureCommand(static_cast<std::uint32_t>(command), pid))
+    {
+        capturePending_ = false;
+    }
+}
+
+bool SensorHelperClient::SendCaptureCommand(std::uint32_t command, std::uint32_t pid)
+{
+    ipc::FrameCaptureCommandPayload payload{};
+    payload.command = command;
+    payload.targetPid = pid;
+
+    std::array<std::uint8_t, ipc::kMaxMessageBytes> buffer{};
+    const std::size_t written =
+        ipc::EncodeMessage(ipc::MessageKind::FrameCaptureCommand, payload, ++commandSequence_,
+                           GetTickCount64(), buffer.data(), buffer.size());
+    if (written == 0)
+    {
+        return false;
+    }
+
+    DWORD bytesWritten = 0;
+    return WriteFile(AsHandle(pipe_), buffer.data(), static_cast<DWORD>(written), &bytesWritten,
+                     nullptr) != FALSE &&
+           bytesWritten == static_cast<DWORD>(written);
 }
 
 void SensorHelperClient::SendHello()
@@ -251,6 +359,7 @@ bool SensorHelperClient::DrainReceiveBuffer()
             return false;
         }
     }
+    SendPendingCaptureCommand();
     return true;
 }
 
@@ -350,6 +459,42 @@ bool SensorHelperClient::HandleMessage(const ipc::DecodedMessage& message)
         }
         haveData_ = true;
         ++snapshotCount_;
+        return true;
+    }
+    case ipc::MessageKind::FrameTimeStats:
+    {
+        ipc::FrameTimeStatsPayload payload{};
+        if (!ipc::DecodePayload(message, payload))
+        {
+            return true; // Wrong-sized frame-time payload: ignore rather than trust it.
+        }
+        std::size_t count = payload.eventCount;
+        if (count > ipc::kMaxFrameEvents)
+        {
+            count = ipc::kMaxFrameEvents;
+        }
+        const std::size_t cap = ipc::kMaxFrameEvents * 16;
+        if (frameEvents_.size() + count > cap)
+        {
+            const std::size_t drop = frameEvents_.size() + count - cap;
+            frameEvents_.erase(frameEvents_.begin(),
+                               frameEvents_.begin() + static_cast<std::ptrdiff_t>(drop));
+        }
+        frameEvents_.insert(frameEvents_.end(), payload.events, payload.events + count);
+        const auto rawState = payload.captureState;
+        if (rawState <= static_cast<std::uint32_t>(FrameCaptureState::Error))
+        {
+            frameState_ = static_cast<FrameCaptureState>(rawState);
+        }
+        else
+        {
+            frameState_ = FrameCaptureState::Error;
+        }
+        frameTargetPid_ = payload.targetPid;
+        frameQpcFrequency_ = payload.qpcFrequency;
+        frameTimestampMs_ = payload.timestampMs;
+        haveFrameData_ = true;
+        ++frameStatsCount_;
         return true;
     }
     case ipc::MessageKind::Goodbye:

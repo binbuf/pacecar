@@ -39,6 +39,7 @@ DisplayFrame BuildDisplayFrame(std::shared_ptr<const MetricsSnapshot> snapshot,
     CaptureSparkline(history.networkDownBytesPerSecond, frame.network);
     CaptureSparkline(history.diskReadBytesPerSecond, frame.disk);
     CaptureSparkline(history.pingRttMs, frame.ping);
+    CaptureSparkline(history.fps, frame.fps);
     return frame;
 }
 } // namespace pacecar::metrics

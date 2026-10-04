@@ -172,10 +172,10 @@ bool TileIdFromConfigKey(std::string_view key, TileId& out) noexcept
         buffer[length++] = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
     const std::string_view normalized(buffer, length);
-    constexpr std::array<std::pair<std::string_view, TileId>, 8> kKeys{{
+    constexpr std::array<std::pair<std::string_view, TileId>, 9> kKeys{{
         {"cpu", TileId::Cpu},       {"ram", TileId::Ram},       {"gpu", TileId::Gpu},
         {"network", TileId::Network}, {"disk", TileId::Disk},    {"ping", TileId::Ping},
-        {"fans", TileId::Fans},     {"mainboard", TileId::Mainboard},
+        {"fans", TileId::Fans},     {"mainboard", TileId::Mainboard}, {"fps", TileId::Fps},
     }};
     for (const auto& [name, id] : kKeys)
     {
@@ -208,8 +208,10 @@ MetricFamily FamilyFor(TileId id) noexcept
     case TileId::Fans:
         return MetricFamily::Fans;
     case TileId::Mainboard:
-    default:
         return MetricFamily::Mainboard;
+    case TileId::Fps:
+    default:
+        return MetricFamily::Fps;
     }
 }
 
@@ -232,8 +234,10 @@ const wchar_t* TileKey(TileId id) noexcept
     case TileId::Fans:
         return L"fans";
     case TileId::Mainboard:
-    default:
         return L"mainboard";
+    case TileId::Fps:
+    default:
+        return L"fps";
     }
 }
 
@@ -247,18 +251,29 @@ LayoutSettings DefaultLayoutSettings() noexcept
     return settings;
 }
 
+void SetFrameCaptureTileVisible(LayoutSettings& settings, bool active) noexcept
+{
+    settings.tiles[static_cast<std::size_t>(TileId::Fps)].visible = active;
+}
+
 LayoutSettings LayoutSettingsFromConfig(const pacecar::Config& config) noexcept
 {
     LayoutSettings settings = DefaultLayoutSettings();
     settings.preset = config.general.layout;
 
-    const std::array<const pacecar::TileConfig*, 6> source{
-        &config.tiles.cpu,  &config.tiles.ram, &config.tiles.gpu,
-        &config.tiles.network, &config.tiles.disk, &config.tiles.ping};
-    for (std::size_t i = 0; i < source.size(); ++i)
+    const std::array<std::pair<TileId, const pacecar::TileConfig*>, 7> source{{
+        {TileId::Cpu, &config.tiles.cpu},
+        {TileId::Ram, &config.tiles.ram},
+        {TileId::Gpu, &config.tiles.gpu},
+        {TileId::Network, &config.tiles.network},
+        {TileId::Disk, &config.tiles.disk},
+        {TileId::Ping, &config.tiles.ping},
+        {TileId::Fps, &config.tiles.fps},
+    }};
+    for (const auto& [id, tilePtr] : source)
     {
-        const pacecar::TileConfig& tile = *source[i];
-        TileSettings& target = settings.tiles[i];
+        const pacecar::TileConfig& tile = *tilePtr;
+        TileSettings& target = settings.tiles[static_cast<std::size_t>(id)];
         target.visible = tile.visible;
         target.fields.label = true;
         target.fields.primary = tile.show_primary;

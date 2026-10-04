@@ -25,20 +25,23 @@ enum class OverlayCommand : std::uint16_t
     ToggleVisibility = 7,
     CopySystemInfo = 8,
     About = 9,
+    // Opt-in FPS / frame-time capture (task T17). Tray/context action; never runs by default.
+    ToggleFrameCapture = 10,
 };
 
 // Overlay right-click menu items in display order. The menu command id is the underlying enum value.
-inline constexpr std::array<OverlayCommand, 6> kContextMenuCommands{
+inline constexpr std::array<OverlayCommand, 7> kContextMenuCommands{
     OverlayCommand::Mode,     OverlayCommand::Settings, OverlayCommand::History,
-    OverlayCommand::Specs,    OverlayCommand::Hide,     OverlayCommand::Exit,
+    OverlayCommand::Specs,    OverlayCommand::ToggleFrameCapture, OverlayCommand::Hide,
+    OverlayCommand::Exit,
 };
 
-// Tray menu items in display order: Show/Hide, Mode, Settings, History, Copy system info, About,
-// Exit (design ref 04-ui-ux.md "Tray").
-inline constexpr std::array<OverlayCommand, 7> kTrayMenuCommands{
+// Tray menu items in display order: Show/Hide, Mode, Settings, History, FPS capture, Copy system
+// info, About, Exit (design ref 04-ui-ux.md "Tray").
+inline constexpr std::array<OverlayCommand, 8> kTrayMenuCommands{
     OverlayCommand::ToggleVisibility, OverlayCommand::Mode,     OverlayCommand::Settings,
-    OverlayCommand::History,          OverlayCommand::CopySystemInfo, OverlayCommand::About,
-    OverlayCommand::Exit,
+    OverlayCommand::History,          OverlayCommand::ToggleFrameCapture,
+    OverlayCommand::CopySystemInfo,   OverlayCommand::About,    OverlayCommand::Exit,
 };
 
 // The display label for a command (stable static storage).
@@ -64,6 +67,8 @@ inline constexpr std::array<OverlayCommand, 7> kTrayMenuCommands{
         return L"Copy system info";
     case OverlayCommand::About:
         return L"About";
+    case OverlayCommand::ToggleFrameCapture:
+        return L"FPS capture";
     case OverlayCommand::None:
     default:
         return L"";
@@ -74,6 +79,6 @@ inline constexpr std::array<OverlayCommand, 7> kTrayMenuCommands{
 [[nodiscard]] inline bool IsOverlayCommand(unsigned id) noexcept
 {
     return id >= static_cast<unsigned>(OverlayCommand::Mode) &&
-           id <= static_cast<unsigned>(OverlayCommand::About);
+           id <= static_cast<unsigned>(OverlayCommand::ToggleFrameCapture);
 }
 } // namespace pacecar::overlay

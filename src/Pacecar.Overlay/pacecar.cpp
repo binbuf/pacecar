@@ -511,6 +511,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     pacecar::overlay::Sampler sampler;
     pacecar::overlay::HelperLauncher helperLauncher;
     bool deepSensorsActive = false;
+    bool frameCaptureActive = false;
 
     // The repaint gate is created here (not with the frame pipeline below) so the Settings window's
     // live-apply path can retune its interval without recreating it.
@@ -538,10 +539,32 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         }
     };
 
-    // On-demand deep-sensor helper lifecycle: enable the client/provider and launch the elevated
-    // helper (single UAC prompt) when the user turns deep sensors on; terminate the helper we
-    // started when they turn it off. The protocol is unchanged - only the launch is a shell concern.
-    const auto applyDeepSensors = [&sampler, &helperLauncher, &deepSensorsActive](bool enabled)
+    // On-demand helper lifecycle shared by deep sensors and FPS capture: the elevated helper is
+// launched (single UAC prompt) when either feature is on and terminated when both are off. The
+// protocol is unchanged - only the launch is a shell concern.
+    const auto updateHelperLifecycle = [&sampler, &helperLauncher, &deepSensorsActive,
+                                        &frameCaptureActive](const wchar_t* reason)
+    {
+        const bool needed = deepSensorsActive || frameCaptureActive;
+        if (needed)
+        {
+            const pacecar::overlay::HelperLaunchResult result = helperLauncher.EnsureElevated();
+            if (result.launched)
+            {
+                pacecar::LogInfo(std::wstring(reason) + L": " + result.message);
+            }
+            else
+            {
+                pacecar::LogWarn(std::wstring(reason) + L": " + result.message);
+            }
+        }
+        else
+        {
+            helperLauncher.Stop();
+        }
+    };
+
+    const auto applyDeepSensors = [&sampler, &deepSensorsActive, &updateHelperLifecycle](bool enabled)
     {
         if (enabled == deepSensorsActive)
         {
@@ -549,21 +572,25 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         }
         deepSensorsActive = enabled;
         sampler.SetDeepSensorsEnabled(enabled);
+        updateHelperLifecycle(L"deep sensors");
+    };
+
+    // Opt-in FPS / frame-time capture (task T17): the sampler asks the helper to start/stop an ETW
+    // session for the foreground PID. Never enabled by default; the helper is launched on demand.
+    const auto applyFrameCapture = [&sampler, &frameCaptureActive, &updateHelperLifecycle,
+                                    &logEvent](bool enabled)
+    {
+        if (enabled == frameCaptureActive)
+        {
+            return;
+        }
+        frameCaptureActive = enabled;
+        sampler.SetFrameCaptureEnabled(enabled);
+        updateHelperLifecycle(L"fps capture");
+        logEvent(enabled ? L"fps capture: on" : L"fps capture: off");
         if (enabled)
         {
-            const pacecar::overlay::HelperLaunchResult result = helperLauncher.EnsureElevated();
-            if (result.launched)
-            {
-                pacecar::LogInfo(L"deep sensors: " + result.message);
-            }
-            else
-            {
-                pacecar::LogWarn(L"deep sensors: " + result.message);
-            }
-        }
-        else
-        {
-            helperLauncher.Stop();
+            pacecar::LogInfo(L"fps capture: ETW capture requested for the foreground process");
         }
     };
 
@@ -590,6 +617,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
             text += L"Sampler: " + sampler.Diagnostics() + L"\n";
             text += L"Helper: " + sampler.HelperStatus() + L"\n";
             text += L"PawnIO: " + sampler.PawnIOStatus() + L"\n";
+            text += L"FPS capture: " + sampler.FrameCaptureStatus() + L"\n";
+            text += L"FPS caveats: HAGS reduces GPU timestamp accuracy; OpenGL/Vulkan are poorly "
+                    L"instrumented\n";
             return text;
         };
 
@@ -629,6 +659,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
             }
             refreshShellFlags();
             applyDeepSensors(config.sensors.deep_sensors);
+            applyFrameCapture(config.sensors.fps_capture);
             saver.Touch();
         };
 
@@ -682,6 +713,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                 MessageBoxW(overlay.Hwnd(), L"Pacecar 2.0\nSystem metrics overlay",
                             L"About Pacecar", MB_OK | MB_ICONINFORMATION);
                 break;
+            case pacecar::overlay::OverlayCommand::ToggleFrameCapture:
+            {
+                const bool enable = !sampler.FrameCaptureEnabled();
+                config.sensors.fps_capture = enable;
+                applyFrameCapture(enable);
+                saver.Touch();
+                break;
+            }
             case pacecar::overlay::OverlayCommand::Settings:
                 if (!settingsWindow.Open(settingsHooks))
                 {
@@ -847,6 +886,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     // visible (shown and not occluded/locked).
     static_cast<void>(sampler.Start(config, overlay.Hwnd()));
     applyDeepSensors(config.sensors.deep_sensors);
+    applyFrameCapture(config.sensors.fps_capture);
     overlay.SetVisibilityChangedCallback(
         [&sampler](bool visible) { sampler.SetVisible(visible); });
     sampler.SetVisible(overlay.EffectivelyVisible());

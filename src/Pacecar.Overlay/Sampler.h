@@ -27,6 +27,7 @@
 #include "pacecar/config/Config.h"
 #include "pacecar/metrics/Aggregator.h"
 #include "pacecar/metrics/DisplayFrame.h"
+#include "pacecar/metrics/FrameTimeProvider.h"
 #include "pacecar/metrics/GpuPdhProvider.h"
 #include "pacecar/metrics/GpuVendorProvider.h"
 #include "pacecar/metrics/PawnIODetection.h"
@@ -89,19 +90,32 @@ class Sampler
     // PawnIO detection result as text ("installed" / "not installed").
     [[nodiscard]] std::wstring PawnIOStatus() const;
 
+    // ---- Opt-in FPS / frame-time capture (task T17) -------------------------------------------
+    // Starts/stops the ETW capture in the helper for the current foreground PID. The capture never
+    // runs unless explicitly enabled and is torn down on stop. Returns true when the state changed.
+    bool SetFrameCaptureEnabled(bool enabled) noexcept;
+    [[nodiscard]] bool FrameCaptureEnabled() const noexcept;
+
+    // Human-readable capture status for the About text and the overlay status line: active FPS,
+    // "off", or an explanatory conflict/error line.
+    [[nodiscard]] std::wstring FrameCaptureStatus() const;
+
   private:
     void ThreadMain();
     void TickOnce();
     void PublishFrame(std::shared_ptr<const pacecar::metrics::MetricsSnapshot> snapshot);
     void BuildProviders(const pacecar::Config& config);
+    void UpdateHelperEnabled() noexcept;
 
     std::unique_ptr<pacecar::metrics::Aggregator> aggregator_;
     std::shared_ptr<pacecar::metrics::GpuPdhProvider> gpuProvider_;
     std::shared_ptr<pacecar::metrics::GpuVendorProvider> vendorProvider_;
     std::shared_ptr<pacecar::metrics::SensorHelperClient> helperClient_;
     std::shared_ptr<pacecar::metrics::SensorHelperProvider> helperProvider_;
+    std::shared_ptr<pacecar::metrics::FrameTimeProvider> frameProvider_;
     pacecar::metrics::PawnIOStatus pawnIoStatus_ = pacecar::metrics::PawnIOStatus::Absent;
     std::atomic<bool> deepSensorsEnabled_{false};
+    std::atomic<bool> frameCaptureEnabled_{false};
     std::thread thread_;
 
     mutable std::mutex mutex_;

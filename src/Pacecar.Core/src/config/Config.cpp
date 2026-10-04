@@ -354,7 +354,8 @@ void from_json(const Json& j, LayoutConfig& layout)
 void to_json(Json& j, const TilesConfig& tiles)
 {
     j = Json{{"cpu", tiles.cpu},       {"ram", tiles.ram},       {"gpu", tiles.gpu},
-             {"network", tiles.network}, {"disk", tiles.disk},    {"ping", tiles.ping}};
+             {"network", tiles.network}, {"disk", tiles.disk},    {"ping", tiles.ping},
+             {"fps", tiles.fps}};
 }
 
 void from_json(const Json& j, TilesConfig& tiles)
@@ -370,6 +371,11 @@ void from_json(const Json& j, TilesConfig& tiles)
     tiles.network = sub("network").get<TileConfig>();
     tiles.disk = sub("disk").get<TileConfig>();
     tiles.ping = sub("ping").get<TileConfig>();
+    // The FPS tile defaults to hidden; a missing "fps" key must reproduce that default rather than
+    // the generic visible TileConfig.
+    const auto fpsIt = j.find("fps");
+    tiles.fps = (fpsIt != j.end() && fpsIt->is_object()) ? fpsIt->get<TileConfig>()
+                                                         : pacecar::TileConfig{false};
 }
 
 void to_json(Json& j, const GeneralConfig& general)
@@ -443,6 +449,7 @@ void to_json(Json& j, const SensorsConfig& sensors)
              {"ram_temperature", sensors.ram_temperature},
              {"mainboard_temperature", sensors.mainboard_temperature},
              {"deep_sensors", sensors.deep_sensors},
+             {"fps_capture", sensors.fps_capture},
              {"disk_temp_mode", DiskTempToString(sensors.disk_temp_mode)},
              {"fan_mode", FanModeToString(sensors.fan_mode)},
              {"mainboard_mode", MainboardModeToString(sensors.mainboard_mode)},
@@ -463,6 +470,7 @@ void from_json(const Json& j, SensorsConfig& sensors)
     sensors.ram_temperature = GetBool(j, "ram_temperature", defaults.ram_temperature);
     sensors.mainboard_temperature = GetBool(j, "mainboard_temperature", defaults.mainboard_temperature);
     sensors.deep_sensors = GetBool(j, "deep_sensors", defaults.deep_sensors);
+    sensors.fps_capture = GetBool(j, "fps_capture", defaults.fps_capture);
     sensors.disk_temp_mode = static_cast<DiskTempMode>(
         ParseEnumIndex(j, "disk_temp_mode", kDiskTempNames, static_cast<int>(defaults.disk_temp_mode)));
     sensors.fan_mode = static_cast<FanSpeedMode>(

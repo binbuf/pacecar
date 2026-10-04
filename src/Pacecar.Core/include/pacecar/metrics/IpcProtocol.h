@@ -42,6 +42,10 @@ enum class MessageKind : std::uint16_t
     HelloAck = 2,
     SensorSnapshot = 3,
     Goodbye = 4,
+    // Frame-time (FPS) extension (task T17). The helper streams decoded present events; the native
+    // side derives intervals/FPS. `FrameCaptureCommand` is the client -> helper control message.
+    FrameTimeStats = 5,
+    FrameCaptureCommand = 6,
 };
 
 struct MessageHeader
@@ -127,6 +131,65 @@ struct HelloAckPayload
 };
 
 static_assert(sizeof(HelloAckPayload) == 8, "HelloAckPayload layout must stay fixed");
+
+// ---------------------------------------------------------------------------------------------
+// Frame-time capture extension (task T17).
+//
+// `captureState` carries the numeric value of `pacecar::metrics::FrameCaptureState`
+// (0 NotCapturing, 1 Capturing, 2 SessionBusy, 3 AccessDenied, 4 ProviderUnavailable, 5 NoTarget,
+// 6 Error). The values are duplicated on the managed side; changing them is a wire change.
+//
+// The helper sends `FrameTimeStats` roughly once per second with the present events decoded since
+// the previous message (incremental, bounded by `kMaxFrameEvents`). The native `FrameTimeProcessor`
+// turns consecutive presents into intervals and derives FPS/frame-time/percentiles. `event.kind` is
+// 1 for a decoded present; CPU/GPU durations are `-1` when unknown.
+// ---------------------------------------------------------------------------------------------
+
+inline constexpr std::size_t kMaxFrameEvents = 120;
+
+struct FrameEventPayload
+{
+    std::uint64_t qpcTicks; // present timestamp in `qpcFrequency` ticks
+    std::int64_t cpuTicks;  // CPU frame duration; -1 when unknown
+    std::int64_t gpuTicks;  // GPU frame duration; -1 when unknown
+    std::uint32_t pid;
+    std::uint16_t kind; // 1 = present
+    std::uint16_t reserved;
+};
+
+static_assert(sizeof(FrameEventPayload) == 32, "FrameEventPayload layout must stay fixed");
+
+struct FrameTimeStatsPayload
+{
+    std::uint64_t sequence;
+    std::uint64_t timestampMs;
+    std::uint64_t qpcFrequency; // ticks per second (10,000,000 for ETW 100 ns timestamps)
+    std::uint32_t targetPid;
+    std::uint32_t captureState;
+    std::uint32_t eventCount; // number of valid entries in `events`
+    std::uint32_t reserved;
+    FrameEventPayload events[kMaxFrameEvents];
+};
+
+static_assert(sizeof(FrameTimeStatsPayload) <= kMaxPayloadBytes,
+              "FrameTimeStatsPayload must fit the payload bound");
+
+// Client -> helper capture control. `command` is 0 (stop) or 1 (start); `targetPid` is the process
+// to capture (ignored on stop). The helper answers through `captureState` in the next stats frame.
+enum class FrameCaptureCommand : std::uint32_t
+{
+    Stop = 0,
+    Start = 1,
+};
+
+struct FrameCaptureCommandPayload
+{
+    std::uint32_t command;
+    std::uint32_t targetPid;
+};
+
+static_assert(sizeof(FrameCaptureCommandPayload) == 8,
+              "FrameCaptureCommandPayload layout must stay fixed");
 
 #pragma pack(pop)
 

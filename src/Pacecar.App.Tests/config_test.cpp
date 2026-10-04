@@ -168,6 +168,15 @@ const char* kDefaultConfigJson = R"JSON({
       "show_visualization": true,
       "visualization": "gauges",
       "mini_sparklines": false
+    },
+    "fps": {
+      "visible": false,
+      "show_primary": true,
+      "show_secondary": true,
+      "show_tertiary": true,
+      "show_visualization": true,
+      "visualization": "gauges",
+      "mini_sparklines": false
     }
   },
   "layout": {
@@ -185,6 +194,7 @@ const char* kDefaultConfigJson = R"JSON({
     "ram_temperature": true,
     "mainboard_temperature": true,
     "deep_sensors": false,
+    "fps_capture": false,
     "disk_temp_mode": "selected_disk",
     "fan_mode": "highest",
     "mainboard_mode": "highest",

@@ -83,6 +83,8 @@
     <ClCompile Include="cpu_provider_test.cpp" />
     <ClCompile Include="disk_provider_test.cpp" />
     <ClCompile Include="format_test.cpp" />
+    <ClCompile Include="frame_time_processor_test.cpp" />
+    <ClCompile Include="frame_time_provider_test.cpp" />
     <ClCompile Include="gpu_provider_test.cpp" />
     <ClCompile Include="gpu_vendor_provider_test.cpp" />
     <ClCompile Include="helper_launcher_test.cpp" />

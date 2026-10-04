@@ -42,7 +42,8 @@ internal static class Program
             cancellation.Cancel();
         };
 
-        var server = new PipeServer(pipeName, userSid);
+        using var frameTime = new EtwFrameTime();
+        var server = new PipeServer(pipeName, userSid, frameTime);
         Console.WriteLine($"[main] listening on {pipeName}");
         server.Run(sensors.Read, TimeSpan.FromSeconds(1), cancellation.Token);
         Console.WriteLine("[main] stopped");

@@ -72,6 +72,8 @@
     <ClInclude Include="include\pacecar\metrics\DeviceSelection.h" />
     <ClInclude Include="include\pacecar\metrics\DiskProvider.h" />
     <ClInclude Include="include\pacecar\metrics\DisplayFrame.h" />
+    <ClInclude Include="include\pacecar\metrics\FrameTimeProcessor.h" />
+    <ClInclude Include="include\pacecar\metrics\FrameTimeProvider.h" />
     <ClInclude Include="include\pacecar\metrics\HistoryRetention.h" />
     <ClInclude Include="include\pacecar\metrics\MetricsFingerprint.h" />
     <ClInclude Include="include\pacecar\metrics\RenderGate.h" />
@@ -118,6 +120,8 @@
     <ClCompile Include="src\metrics\DeviceSelection.cpp" />
     <ClCompile Include="src\metrics\DiskProvider.cpp" />
     <ClCompile Include="src\metrics\DisplayFrame.cpp" />
+    <ClCompile Include="src\metrics\FrameTimeProcessor.cpp" />
+    <ClCompile Include="src\metrics\FrameTimeProvider.cpp" />
     <ClCompile Include="src\metrics\HistoryRetention.cpp" />
     <ClCompile Include="src\metrics\MetricsFingerprint.cpp" />
     <ClCompile Include="src\metrics\RenderGate.cpp" />

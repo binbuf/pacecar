@@ -282,9 +282,10 @@ TEST(Layout, SettingsFromConfigMapsTogglesAndGeometry)
 
 TEST(OverlayCommands, MenuExposesAllRequiredCommandsInOrder)
 {
-    const std::array<OverlayCommand, 6> expected{
+    const std::array<OverlayCommand, 7> expected{
         OverlayCommand::Mode,  OverlayCommand::Settings, OverlayCommand::History,
-        OverlayCommand::Specs, OverlayCommand::Hide,     OverlayCommand::Exit};
+        OverlayCommand::Specs, OverlayCommand::ToggleFrameCapture, OverlayCommand::Hide,
+        OverlayCommand::Exit};
     EXPECT_EQ(kContextMenuCommands, expected);
     for (const OverlayCommand command : kContextMenuCommands)
     {

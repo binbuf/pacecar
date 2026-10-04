@@ -62,6 +62,8 @@ enum class MetricFamily : std::uint8_t
     Ping,
     Fans,
     Mainboard,
+    // Opt-in FPS / frame-time tile (task T17); shown only while a capture is active.
+    Fps,
 };
 
 // Per-field visibility for one tile, mirroring `TileConfig` (config/Config.h). `visualization`
