@@ -8,7 +8,7 @@
 ; THIRD_PARTY_NOTICES.md. Debug symbols and test executables are excluded by the CI staging step.
 
 #ifndef AppVersion
-  #define AppVersion "0.0.0"
+  #define AppVersion "0.2.0"
 #endif
 
 #ifndef SourceDir

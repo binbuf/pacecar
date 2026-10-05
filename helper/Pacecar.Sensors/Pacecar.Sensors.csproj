@@ -5,6 +5,9 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <AssemblyName>Pacecar.Sensors</AssemblyName>
     <RootNamespace>Pacecar.Sensors</RootNamespace>
+    <Version>0.2.0</Version>
+    <FileVersion>0.2.0.0</FileVersion>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

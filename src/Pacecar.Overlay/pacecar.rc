@@ -82,8 +82,8 @@ END
 //
 
 1 VERSIONINFO
- FILEVERSION 0,1,0,0
- PRODUCTVERSION 0,1,0,0
+ FILEVERSION 0,2,0,0
+ PRODUCTVERSION 0,2,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -100,11 +100,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "Pacecar"
             VALUE "FileDescription",  "Pacecar Overlay"
-            VALUE "FileVersion",      "0.1.0.0"
+            VALUE "FileVersion",      "0.2.0.0"
             VALUE "InternalName",     "Pacecar.Overlay"
             VALUE "OriginalFilename", "Pacecar.Overlay.exe"
             VALUE "ProductName",      "Pacecar"
-            VALUE "ProductVersion",   "0.1.0.0"
+            VALUE "ProductVersion",   "0.2.0.0"
         END
     END
     BLOCK "VarFileInfo"
