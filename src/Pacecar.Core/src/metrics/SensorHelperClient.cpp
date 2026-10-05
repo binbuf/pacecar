@@ -193,6 +193,8 @@ bool SensorHelperClient::TryConnectInternal()
     capabilities_ = 0;
     haveFrameData_ = false;
     frameState_ = FrameCaptureState::NotCapturing;
+    frameEventsLost_ = 0;
+    frameQueueDrops_ = 0;
     frameEvents_.clear();
     rx_.clear();
     backoffMs_ = kInitialBackoffMs;
@@ -218,6 +220,8 @@ void SensorHelperClient::SetCaptureTarget(std::uint32_t pid, bool enabled)
         frameState_ = FrameCaptureState::NotCapturing;
         frameTargetPid_ = 0;
         frameQpcFrequency_ = 0;
+        frameEventsLost_ = 0;
+        frameQueueDrops_ = 0;
         frameEvents_.clear();
         haveFrameData_ = false;
     }
@@ -257,7 +261,9 @@ void SensorHelperClient::TakeFrameData(std::vector<ipc::FrameEventPayload>& even
                                        FrameCaptureState& state,
                                        std::uint32_t& targetPid,
                                        std::uint64_t& qpcFrequency,
-                                       std::uint64_t& timestampMs)
+                                       std::uint64_t& timestampMs,
+                                       std::uint64_t& eventsLost,
+                                       std::uint64_t& queueDrops)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     events.assign(frameEvents_.begin(), frameEvents_.end());
@@ -266,6 +272,8 @@ void SensorHelperClient::TakeFrameData(std::vector<ipc::FrameEventPayload>& even
     targetPid = frameTargetPid_;
     qpcFrequency = frameQpcFrequency_;
     timestampMs = frameTimestampMs_;
+    eventsLost = frameEventsLost_;
+    queueDrops = frameQueueDrops_;
 }
 
 void SensorHelperClient::SendPendingCaptureCommand()
@@ -493,6 +501,8 @@ bool SensorHelperClient::HandleMessage(const ipc::DecodedMessage& message)
         frameTargetPid_ = payload.targetPid;
         frameQpcFrequency_ = payload.qpcFrequency;
         frameTimestampMs_ = payload.timestampMs;
+        frameEventsLost_ = payload.eventsLost;
+        frameQueueDrops_ = payload.queueDrops;
         haveFrameData_ = true;
         ++frameStatsCount_;
         return true;

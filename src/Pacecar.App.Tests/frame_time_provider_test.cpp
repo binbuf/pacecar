@@ -274,4 +274,53 @@ TEST(FrameTimeProvider, FpsTileFollowsCaptureOptIn)
     config.sensors.fps_capture = false;
     EXPECT_FALSE(hasFps(pacecar::overlay::LayoutSettingsFromConfig(config)));
 }
+
+TEST(FrameTimeProvider, FlagsDegradedWhenCaptureHealthCountersRise)
+{
+    const std::wstring name = UniquePipeName();
+    PipeServer server(name);
+    ASSERT_TRUE(server.Valid());
+
+    auto client = std::make_shared<SensorHelperClient>(name);
+    FrameTimeProvider provider(client, [] { return std::uint64_t{0}; });
+
+    ASSERT_TRUE(client->Pump(0));
+    ASSERT_TRUE(server.Accept());
+    MessageHeader hello{};
+    std::vector<std::uint8_t> helloPayload;
+    ASSERT_TRUE(server.ReadMessage(hello, helloPayload));
+    WriteHelloAck(server);
+
+    const auto fill = [](FrameTimeStatsPayload& stats, std::uint64_t startTicks) {
+        stats.eventCount = 2;
+        for (int i = 0; i < 2; ++i)
+        {
+            stats.events[i].qpcTicks = startTicks + (166'667ull * static_cast<std::uint64_t>(i));
+            stats.events[i].pid = 100;
+            stats.events[i].kind = 1;
+            stats.events[i].cpuTicks = -1;
+            stats.events[i].gpuTicks = -1;
+        }
+    };
+
+    FrameTimeStatsPayload first = MakeFrameStats(FrameCaptureState::Capturing, 100, 2);
+    fill(first, 0);
+    first.queueDrops = 0;
+    ASSERT_TRUE(server.WriteMessage(MessageKind::FrameTimeStats, first, 2, 2));
+
+    MetricsSnapshot snapshot{};
+    EXPECT_EQ(provider.Poll(snapshot), S_OK);
+    EXPECT_FALSE(provider.Degraded());
+    EXPECT_FALSE(snapshot.frame.degraded);
+
+    FrameTimeStatsPayload second = MakeFrameStats(FrameCaptureState::Capturing, 100, 2);
+    fill(second, 333'334);
+    second.queueDrops = 7;
+    ASSERT_TRUE(server.WriteMessage(MessageKind::FrameTimeStats, second, 3, 3));
+
+    EXPECT_EQ(provider.Poll(snapshot), S_OK);
+    EXPECT_TRUE(provider.Degraded());
+    EXPECT_TRUE(snapshot.frame.degraded);
+    EXPECT_NE(provider.StatusLine().find(L"degraded"), std::wstring::npos);
+}
 } // namespace

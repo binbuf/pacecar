@@ -101,7 +101,9 @@ class SensorHelperClient
                        FrameCaptureState& state,
                        std::uint32_t& targetPid,
                        std::uint64_t& qpcFrequency,
-                       std::uint64_t& timestampMs);
+                       std::uint64_t& timestampMs,
+                       std::uint64_t& eventsLost,
+                       std::uint64_t& queueDrops);
 
     // Maps the latest readings into the snapshot. Only touches the fields the helper owns; leaves
     // the unprivileged baseline (for example the ACPI CPU temperature) intact when the helper has
@@ -151,6 +153,8 @@ class SensorHelperClient
     std::uint32_t frameTargetPid_ = 0;
     std::uint64_t frameQpcFrequency_ = 0;
     std::uint64_t frameTimestampMs_ = 0;
+    std::uint64_t frameEventsLost_ = 0;
+    std::uint64_t frameQueueDrops_ = 0;
     std::vector<ipc::FrameEventPayload> frameEvents_;
     bool haveFrameData_ = false;
     std::uint64_t frameStatsCount_ = 0;

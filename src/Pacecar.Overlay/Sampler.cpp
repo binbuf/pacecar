@@ -43,6 +43,19 @@ bool ApplyEcoQos(HANDLE thread) noexcept
     return SetThreadInformation(thread, ThreadPowerThrottling, &state, sizeof(state)) != FALSE;
 }
 
+// PID owning the current foreground window, or 0 when there is none.
+std::uint32_t ForegroundWindowPid() noexcept
+{
+    const HWND foreground = GetForegroundWindow();
+    if (foreground == nullptr)
+    {
+        return 0;
+    }
+    DWORD pid = 0;
+    static_cast<void>(GetWindowThreadProcessId(foreground, &pid));
+    return pid;
+}
+
 // Stops background sampling from raising the platform timer resolution (best-effort).
 bool ApplyIgnoreTimerResolution() noexcept
 {
@@ -206,6 +219,20 @@ void Sampler::TickOnce()
     {
         return;
     }
+
+    // Track the foreground process here, on the sampler thread, rather than on the UI repaint path:
+    // the overlay may be hidden or not repainting while a game runs, which would otherwise leave the
+    // capture target unset (the helper would sit in NoTarget and never open an ETW session). Never
+    // target ourselves, so opening a Pacecar window does not hijack the capture.
+    if (frameCaptureEnabled_.load(std::memory_order_relaxed) && helperClient_)
+    {
+        const std::uint32_t pid = ForegroundWindowPid();
+        if (pid != 0 && pid != GetCurrentProcessId())
+        {
+            SetForegroundPid(pid);
+        }
+    }
+
     if (!aggregator_->Tick())
     {
         return;

@@ -57,23 +57,38 @@ bool FrameCaptureStateIsActive(FrameCaptureState state) noexcept
 FrameTimeProcessor::FrameTimeProcessor(std::size_t capacity)
     : capacity_(capacity == 0 ? kDefaultCapacity : capacity)
 {
-    intervalsMs_.reserve(capacity_);
-    cpuMs_.reserve(capacity_);
-    gpuMs_.reserve(capacity_);
+    for (Lane& lane : lanes_)
+    {
+        lane.intervalsMs.reserve(capacity_);
+        lane.cpuMs.reserve(capacity_);
+        lane.gpuMs.reserve(capacity_);
+    }
     scratch_.reserve(capacity_);
+}
+
+void FrameTimeProcessor::ResetLanes() noexcept
+{
+    for (Lane& lane : lanes_)
+    {
+        lane.intervalsMs.clear();
+        lane.cpuMs.clear();
+        lane.gpuMs.clear();
+        lane.swapChain = 0;
+        lane.presents = 0;
+        lane.prevTicks = 0;
+        lane.head = 0;
+        lane.count = 0;
+        lane.havePrevious = false;
+    }
+    laneCount_ = 0;
 }
 
 void FrameTimeProcessor::Reset() noexcept
 {
-    intervalsMs_.clear();
-    cpuMs_.clear();
-    gpuMs_.clear();
+    ResetLanes();
+    currentPid_ = 0;
+    havePid_ = false;
     scratch_.clear();
-    head_ = 0;
-    count_ = 0;
-    havePrevious_ = false;
-    previousTicks_ = 0;
-    previousPid_ = 0;
 }
 
 void FrameTimeProcessor::SetClockFrequency(std::uint64_t ticksPerSecond) noexcept
@@ -84,33 +99,80 @@ void FrameTimeProcessor::SetClockFrequency(std::uint64_t ticksPerSecond) noexcep
     }
 }
 
-double FrameTimeProcessor::ValueAt(const std::vector<double>& ring, std::size_t index) const noexcept
+FrameTimeProcessor::Lane* FrameTimeProcessor::FindOrCreateLane(std::uint64_t swapChain) noexcept
 {
-    const std::size_t oldest = (head_ + capacity_ - count_) % capacity_;
+    for (std::size_t i = 0; i < laneCount_; ++i)
+    {
+        if (lanes_[i].swapChain == swapChain)
+        {
+            return &lanes_[i];
+        }
+    }
+    if (laneCount_ >= kMaxLanes)
+    {
+        return nullptr;
+    }
+    Lane& lane = lanes_[laneCount_++];
+    lane.swapChain = swapChain;
+    return &lane;
+}
+
+std::size_t FrameTimeProcessor::ActiveLane() const noexcept
+{
+    std::size_t best = 0;
+    for (std::size_t i = 1; i < laneCount_; ++i)
+    {
+        const Lane& candidate = lanes_[i];
+        const Lane& incumbent = lanes_[best];
+        if (candidate.presents > incumbent.presents ||
+            (candidate.presents == incumbent.presents && candidate.count > incumbent.count))
+        {
+            best = i;
+        }
+    }
+    return best;
+}
+
+double FrameTimeProcessor::ValueAt(const Lane& lane, const std::vector<double>& ring,
+                                   std::size_t index) const noexcept
+{
+    const std::size_t oldest = (lane.head + capacity_ - lane.count) % capacity_;
     return ring[(oldest + index) % capacity_];
 }
 
-double FrameTimeProcessor::IntervalAt(std::size_t chronologicalIndex) const noexcept
+double FrameTimeProcessor::IntervalAt(const Lane& lane, std::size_t chronologicalIndex) const noexcept
 {
-    return ValueAt(intervalsMs_, chronologicalIndex);
+    return ValueAt(lane, lane.intervalsMs, chronologicalIndex);
 }
 
 bool FrameTimeProcessor::AddPresent(const PresentEvent& event) noexcept
 {
-    // A PID change starts a fresh baseline so cross-process presents never create an interval.
-    const bool sameProcess = havePrevious_ && event.pid == previousPid_;
-    const bool haveInterval = sameProcess && event.qpcTicks > previousTicks_;
+    // A PID change starts a fresh capture target: drop every chain's baseline so presents from the
+    // previous process never create an interval.
+    if (!havePid_ || event.pid != currentPid_)
+    {
+        ResetLanes();
+        currentPid_ = event.pid;
+        havePid_ = true;
+    }
 
+    Lane* lane = FindOrCreateLane(event.swapChain);
+    if (lane == nullptr)
+    {
+        return false;
+    }
+
+    const bool haveInterval = lane->havePrevious && event.qpcTicks > lane->prevTicks;
     double intervalMs = 0.0;
     if (haveInterval)
     {
-        const std::uint64_t delta = event.qpcTicks - previousTicks_;
+        const std::uint64_t delta = event.qpcTicks - lane->prevTicks;
         intervalMs = static_cast<double>(delta) * 1000.0 / static_cast<double>(frequency_);
     }
 
-    previousTicks_ = event.qpcTicks;
-    previousPid_ = event.pid;
-    havePrevious_ = true;
+    lane->prevTicks = event.qpcTicks;
+    lane->havePrevious = true;
+    ++lane->presents;
 
     if (!haveInterval || intervalMs <= 0.0 || intervalMs > kMaxIntervalMs)
     {
@@ -122,28 +184,42 @@ bool FrameTimeProcessor::AddPresent(const PresentEvent& event) noexcept
                          : static_cast<double>(ticks) * 1000.0 / static_cast<double>(frequency_);
     };
 
-    const std::size_t slot = head_;
-    if (intervalsMs_.size() < capacity_)
+    if (lane->intervalsMs.size() < capacity_)
     {
-        intervalsMs_.push_back(intervalMs);
-        cpuMs_.push_back(toMs(event.cpuTicks));
-        gpuMs_.push_back(toMs(event.gpuTicks));
+        lane->intervalsMs.push_back(intervalMs);
+        lane->cpuMs.push_back(toMs(event.cpuTicks));
+        lane->gpuMs.push_back(toMs(event.gpuTicks));
     }
     else
     {
-        intervalsMs_[slot] = intervalMs;
-        cpuMs_[slot] = toMs(event.cpuTicks);
-        gpuMs_[slot] = toMs(event.gpuTicks);
+        lane->intervalsMs[lane->head] = intervalMs;
+        lane->cpuMs[lane->head] = toMs(event.cpuTicks);
+        lane->gpuMs[lane->head] = toMs(event.gpuTicks);
     }
-    head_ = (head_ + 1) % capacity_;
-    count_ = std::min(count_ + 1, capacity_);
+    lane->head = (lane->head + 1) % capacity_;
+    lane->count = std::min(lane->count + 1, capacity_);
     return true;
+}
+
+std::size_t FrameTimeProcessor::SampleCount() const noexcept
+{
+    if (laneCount_ == 0)
+    {
+        return 0;
+    }
+    return lanes_[ActiveLane()].count;
 }
 
 FrameTimeStats FrameTimeProcessor::Compute(std::size_t window) const noexcept
 {
     FrameTimeStats stats{};
-    const std::size_t n = window == 0 ? count_ : std::min(window, count_);
+    if (laneCount_ == 0)
+    {
+        return stats;
+    }
+
+    const Lane& lane = lanes_[ActiveLane()];
+    const std::size_t n = window == 0 ? lane.count : std::min(window, lane.count);
     if (n == 0)
     {
         return stats;
@@ -154,17 +230,17 @@ FrameTimeStats FrameTimeProcessor::Compute(std::size_t window) const noexcept
     double gpuSum = 0.0;
     std::size_t cpuCount = 0;
     std::size_t gpuCount = 0;
-    const std::size_t first = count_ - n;
-    for (std::size_t i = first; i < count_; ++i)
+    const std::size_t first = lane.count - n;
+    for (std::size_t i = first; i < lane.count; ++i)
     {
-        scratch_.push_back(IntervalAt(i));
-        const double cpu = ValueAt(cpuMs_, i);
+        scratch_.push_back(IntervalAt(lane, i));
+        const double cpu = ValueAt(lane, lane.cpuMs, i);
         if (cpu >= 0.0)
         {
             cpuSum += cpu;
             ++cpuCount;
         }
-        const double gpu = ValueAt(gpuMs_, i);
+        const double gpu = ValueAt(lane, lane.gpuMs, i);
         if (gpu >= 0.0)
         {
             gpuSum += gpu;

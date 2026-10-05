@@ -166,17 +166,7 @@ void AppendLifecycleLog(const std::wstring& path, std::wstring_view event)
     file << "\n";
 }
 
-std::uint32_t ForegroundProcessId()
-{
-    const HWND foreground = GetForegroundWindow();
-    if (foreground == nullptr)
-    {
-        return 0;
-    }
-    DWORD pid = 0;
-    static_cast<void>(GetWindowThreadProcessId(foreground, &pid));
-    return pid;
-}
+
 
 void CopyTextToClipboard(HWND owner, const std::wstring& text)
 {
@@ -1033,7 +1023,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                 {
                     tray.SetTooltip(pacecar::app::FormatTrayTooltip(*frame->snapshot));
                 }
-                sampler.SetForegroundPid(ForegroundProcessId());
             }
             overlay.SetFrame(std::move(frame));
             overlay.Invalidate();

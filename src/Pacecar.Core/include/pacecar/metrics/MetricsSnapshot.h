@@ -137,6 +137,12 @@ struct FrameMetrics
     double frameTimeMs = 0.0;
     double cpuTimeMs = 0.0;
     double gpuTimeMs = 0.0;
+    // True when capture-health counters report lost/dropped events, so the FPS is shown but should
+    // not be trusted at face value (rendered as a degraded readout).
+    bool degraded = false;
+    // Numeric `FrameCaptureState` (0 NotCapturing .. 6 Error) so the UI can explain why no FPS is
+    // available yet (elevation required, no target, another ETW session, ...).
+    std::uint32_t captureState = 0;
 };
 
 struct BoardMetrics

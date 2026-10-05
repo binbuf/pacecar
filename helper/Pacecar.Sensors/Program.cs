@@ -1,5 +1,7 @@
 using System.Security.Principal;
 
+using Microsoft.Diagnostics.Tracing.Session;
+
 namespace Pacecar.Sensors;
 
 /// <summary>
@@ -31,6 +33,9 @@ internal static class Program
         var pawnIoPresent = PawnIOProbe.IsPresent();
         Console.WriteLine($"[main] PawnIO: {(pawnIoPresent ? "present" : "absent")}");
         Console.WriteLine($"[main] {PawnIOProbe.Guidance(pawnIoPresent)}");
+
+        HelperLog.Write($"[main] starting; pid={Environment.ProcessId} elevated={TraceEventSession.IsElevated() == true}");
+        HelperLog.Write($"[main] pipe={pipeName}");
 
         using var sensors = new SensorServer();
         sensors.Open();

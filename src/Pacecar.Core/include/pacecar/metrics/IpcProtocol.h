@@ -28,7 +28,7 @@ namespace pacecar::ipc
 {
 // "PCAR" stored little-endian.
 inline constexpr std::uint32_t kMagic = 0x50434152u;
-inline constexpr std::uint16_t kProtocolVersion = 1u;
+inline constexpr std::uint16_t kProtocolVersion = 2u;
 inline constexpr std::size_t kMaxPayloadBytes = 4096u;
 // Header (24 bytes) plus the maximum payload, with headroom for a future larger header.
 inline constexpr std::size_t kMaxMessageBytes = kMaxPayloadBytes + 64u;
@@ -139,34 +139,43 @@ static_assert(sizeof(HelloAckPayload) == 8, "HelloAckPayload layout must stay fi
 // (0 NotCapturing, 1 Capturing, 2 SessionBusy, 3 AccessDenied, 4 ProviderUnavailable, 5 NoTarget,
 // 6 Error). The values are duplicated on the managed side; changing them is a wire change.
 //
-// The helper sends `FrameTimeStats` roughly once per second with the present events decoded since
-// the previous message (incremental, bounded by `kMaxFrameEvents`). The native `FrameTimeProcessor`
-// turns consecutive presents into intervals and derives FPS/frame-time/percentiles. `event.kind` is
-// 1 for a decoded present; CPU/GPU durations are `-1` when unknown.
+// The helper sends `FrameTimeStats` on every stream tick. A tick emits one or more messages (each
+// bounded by `kMaxFrameEvents`) until the pending queue is drained, so a high-FPS title is no longer
+// truncated by the transport. The native `FrameTimeProcessor` turns consecutive presents of the
+// same swap chain into intervals and derives FPS/frame-time/percentiles. `event.kind` is 1 for a
+// decoded present; CPU/GPU durations are `-1` when unknown.
+//
+// `eventsLost` / `queueDrops` are capture-health counters. `eventsLost` is the running count of ETW
+// events the session dropped; `queueDrops` is the count of presents the helper discarded because its
+// local queue overflowed. Either being non-zero means the derived FPS may be missing frames and the
+// sample should be presented as degraded rather than trusted.
 // ---------------------------------------------------------------------------------------------
 
-inline constexpr std::size_t kMaxFrameEvents = 120;
+inline constexpr std::size_t kMaxFrameEvents = 100;
 
 struct FrameEventPayload
 {
-    std::uint64_t qpcTicks; // present timestamp in `qpcFrequency` ticks
-    std::int64_t cpuTicks;  // CPU frame duration; -1 when unknown
-    std::int64_t gpuTicks;  // GPU frame duration; -1 when unknown
+    std::uint64_t qpcTicks;   // present timestamp in `qpcFrequency` ticks
+    std::int64_t cpuTicks;    // CPU frame duration; -1 when unknown
+    std::int64_t gpuTicks;    // GPU frame duration; -1 when unknown
+    std::uint64_t swapChain;  // DXGI/D3D9 swap-chain identity; 0 when the provider payload was absent
     std::uint32_t pid;
     std::uint16_t kind; // 1 = present
     std::uint16_t reserved;
 };
 
-static_assert(sizeof(FrameEventPayload) == 32, "FrameEventPayload layout must stay fixed");
+static_assert(sizeof(FrameEventPayload) == 40, "FrameEventPayload layout must stay fixed");
 
 struct FrameTimeStatsPayload
 {
     std::uint64_t sequence;
     std::uint64_t timestampMs;
-    std::uint64_t qpcFrequency; // ticks per second (10,000,000 for ETW 100 ns timestamps)
+    std::uint64_t qpcFrequency; // ticks per second (the machine's QueryPerformanceFrequency)
     std::uint32_t targetPid;
     std::uint32_t captureState;
     std::uint32_t eventCount; // number of valid entries in `events`
+    std::uint32_t eventsLost; // cumulative ETW events lost by the session
+    std::uint32_t queueDrops; // cumulative presents dropped by the helper's local queue
     std::uint32_t reserved;
     FrameEventPayload events[kMaxFrameEvents];
 };

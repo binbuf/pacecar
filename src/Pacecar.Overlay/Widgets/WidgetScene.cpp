@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cwchar>
 #include <span>
@@ -74,6 +75,27 @@ const DemoTile& DemoFor(TileId id) noexcept
     case TileId::Fps:
     default:
         return kFps;
+    }
+}
+
+// Shown in place of an FPS value so a stalled capture explains itself instead of a bare "--".
+// Values mirror `pacecar::metrics::FrameCaptureState` (IpcProtocol.h).
+const wchar_t* FrameUnavailableLabel(std::uint32_t captureState) noexcept
+{
+    switch (captureState)
+    {
+    case 1:
+        return L"waiting..."; // capturing, no interval measured yet
+    case 2:
+        return L"ETW busy"; // another tool owns the session
+    case 3:
+        return L"need admin"; // helper not elevated
+    case 4:
+        return L"no ETW provider";
+    case 5:
+        return L"no target"; // no foreground process to capture
+    default:
+        return L"-- FPS";
     }
 }
 
@@ -317,6 +339,7 @@ std::wstring_view FormatStatRow(TileId id, const pacecar::metrics::MetricsSnapsh
     case TileId::Fps: {
         if (Unavailable(snapshot.frame.status) || snapshot.frame.fps <= 0.0)
         {
+            AppendStatPiece(buffer, size, FrameUnavailableLabel(snapshot.frame.captureState));
             break;
         }
         _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%.0f FPS", snapshot.frame.fps);
@@ -823,7 +846,7 @@ void WidgetScene::DrawLiveTile(ID2D1RenderTarget* target, const TilePlacement& p
         }
         else
         {
-            primaryView = L"-- FPS";
+            primaryView = FrameUnavailableLabel(snapshot.frame.captureState);
             gaugeValid = false;
         }
         break;

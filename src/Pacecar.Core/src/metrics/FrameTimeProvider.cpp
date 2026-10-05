@@ -61,17 +61,27 @@ HRESULT FrameTimeProvider::Poll(MetricsSnapshot& snapshot)
     std::uint32_t targetPid = 0;
     std::uint64_t qpcFrequency = 0;
     std::uint64_t timestampMs = 0;
-    client_->TakeFrameData(eventScratch_, state, targetPid, qpcFrequency, timestampMs);
+    std::uint64_t eventsLost = 0;
+    std::uint64_t queueDrops = 0;
+    client_->TakeFrameData(eventScratch_, state, targetPid, qpcFrequency, timestampMs, eventsLost,
+                           queueDrops);
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
         state_ = state;
     }
+    // Publish the state even when no FPS is available so the UI can explain the gap.
+    snapshot.frame.captureState = static_cast<std::uint32_t>(state);
 
     if (state != FrameCaptureState::Capturing)
     {
+        std::lock_guard<std::mutex> lock(mutex_);
+        degraded_ = false;
+        healthObserved_ = false;
         return E_FAIL;
     }
+
+    UpdateHealth(eventsLost, queueDrops);
 
     processor_.SetClockFrequency(qpcFrequency);
     for (const ipc::FrameEventPayload& event : eventScratch_)
@@ -84,11 +94,12 @@ HRESULT FrameTimeProvider::Poll(MetricsSnapshot& snapshot)
         present.qpcTicks = event.qpcTicks;
         present.cpuTicks = event.cpuTicks;
         present.gpuTicks = event.gpuTicks;
+        present.swapChain = event.swapChain;
         present.pid = event.pid;
         static_cast<void>(processor_.AddPresent(present));
     }
 
-    const FrameTimeStats stats = processor_.Compute();
+    FrameTimeStats stats = processor_.Compute();
     if (!stats.valid)
     {
         // Connected and capturing, but no interval has been measured yet (one present only).
@@ -99,12 +110,45 @@ HRESULT FrameTimeProvider::Poll(MetricsSnapshot& snapshot)
     snapshot.frame.frameTimeMs = stats.frameTimeMs;
     snapshot.frame.cpuTimeMs = stats.cpuTimeMs;
     snapshot.frame.gpuTimeMs = stats.gpuTimeMs;
+    snapshot.frame.degraded = Degraded();
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
         lastFps_ = stats.fps;
     }
     return S_OK;
+}
+
+void FrameTimeProvider::UpdateHealth(std::uint64_t eventsLost, std::uint64_t queueDrops) noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!healthObserved_)
+    {
+        lastEventsLost_ = eventsLost;
+        lastQueueDrops_ = queueDrops;
+        healthObserved_ = true;
+        return;
+    }
+    if (eventsLost < lastEventsLost_ || queueDrops < lastQueueDrops_)
+    {
+        // Counters went backwards: the helper started a fresh capture session.
+        lastEventsLost_ = eventsLost;
+        lastQueueDrops_ = queueDrops;
+        degraded_ = false;
+        return;
+    }
+    if (eventsLost > lastEventsLost_ || queueDrops > lastQueueDrops_)
+    {
+        degraded_ = true;
+        lastEventsLost_ = eventsLost;
+        lastQueueDrops_ = queueDrops;
+    }
+}
+
+bool FrameTimeProvider::Degraded() const noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return degraded_;
 }
 
 void FrameTimeProvider::Reset() noexcept
@@ -114,6 +158,10 @@ void FrameTimeProvider::Reset() noexcept
         std::lock_guard<std::mutex> lock(mutex_);
         state_ = FrameCaptureState::NotCapturing;
         lastFps_ = 0.0;
+        degraded_ = false;
+        healthObserved_ = false;
+        lastEventsLost_ = 0;
+        lastQueueDrops_ = 0;
     }
     if (client_)
     {
@@ -142,6 +190,10 @@ std::wstring FrameTimeProvider::StatusLine() const
         wchar_t buffer[64] = {};
         swprintf_s(buffer, L"%.1f FPS", lastFps_);
         text = buffer;
+    }
+    if (degraded_)
+    {
+        text += L" (degraded: events lost/dropped)";
     }
     return text;
 }

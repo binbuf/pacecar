@@ -19,6 +19,9 @@ internal static class NativeMethods
     public const int ErrorBrokenPipe = 109;
 
     public const uint ProcessQueryLimitedInformation = 0x1000;
+    public const uint ProcessQueryInformation = 0x0400;
+    public const uint TokenQuery = 0x0008;
+    public const int TokenUser = 1;
     public const uint LoadLibrarySearchSystem32 = 0x00000800;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -79,9 +82,24 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool RevertToSelf();
 
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool OpenProcessToken(IntPtr processHandle, uint desiredAccess,
+                                               out IntPtr tokenHandle);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetTokenInformation(IntPtr tokenHandle, int tokenInformationClass,
+                                                  IntPtr tokenInformation,
+                                                  int tokenInformationLength, out int returnLength);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetDefaultDllDirectories(uint directoryFlags);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool QueryPerformanceFrequency(out long frequency);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr LocalFree(IntPtr memory);

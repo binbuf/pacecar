@@ -47,6 +47,10 @@ class FrameTimeProvider final : public IMetricProvider
     // The last computed FPS (0 when not capturing), for the header/status text.
     [[nodiscard]] double LastFps() const noexcept;
 
+    // True once the helper has reported lost/dropped present events for the current capture; the
+    // numbers are still surfaced but flagged as degraded.
+    [[nodiscard]] bool Degraded() const noexcept;
+
     // Human-readable status for the UI: the active state line, or an explanation when the capture
     // has not produced frames yet.
     [[nodiscard]] std::wstring StatusLine() const;
@@ -56,8 +60,16 @@ class FrameTimeProvider final : public IMetricProvider
     Clock clock_;
     FrameTimeProcessor processor_;
     std::vector<ipc::FrameEventPayload> eventScratch_;
+    // Tracks capture-health counters across polls so a helper restart (counters falling) does not
+    // latch the degraded flag forever.
+    void UpdateHealth(std::uint64_t eventsLost, std::uint64_t queueDrops) noexcept;
+
     mutable std::mutex mutex_;
     FrameCaptureState state_ = FrameCaptureState::NotCapturing;
     double lastFps_ = 0.0;
+    bool degraded_ = false;
+    bool healthObserved_ = false;
+    std::uint64_t lastEventsLost_ = 0;
+    std::uint64_t lastQueueDrops_ = 0;
 };
 } // namespace pacecar::metrics

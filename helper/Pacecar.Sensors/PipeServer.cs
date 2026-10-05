@@ -59,10 +59,13 @@ internal sealed class PipeServer
 
             if (handle == new nint(-1))
             {
+                var createError = Marshal.GetLastWin32Error();
+                HelperLog.Write($"[pipe] CreateNamedPipeW failed (Win32 error {createError})");
                 throw new InvalidOperationException(
-                    $"CreateNamedPipeW failed (Win32 error {Marshal.GetLastWin32Error()}).");
+                    $"CreateNamedPipeW failed (Win32 error {createError}).");
             }
 
+            HelperLog.Write("[pipe] listening for a client");
             try
             {
                 if (!NativeMethods.ConnectNamedPipe(handle, nint.Zero))
@@ -75,7 +78,7 @@ internal sealed class PipeServer
                 }
 
                 var client = ClientValidator.Validate(handle, _userSid);
-                Console.WriteLine(client.Accepted
+                HelperLog.Write(client.Accepted
                     ? $"[pipe] accepted pid={client.ProcessId} image={client.ImagePath}"
                     : $"[pipe] rejected pid={client.ProcessId}: {client.Reason}");
 
@@ -88,8 +91,10 @@ internal sealed class PipeServer
                                                   FileAccess.ReadWrite, 65536, isAsync: false);
                 if (!ReadHello(stream))
                 {
+                    HelperLog.Write("[pipe] Hello read failed");
                     continue;
                 }
+                HelperLog.Write("[pipe] Hello ok");
 
                 var capabilities = CapabilitiesOf(readingsFactory());
                 stream.Write(IpcProtocol.EncodeHelloAck((uint)Environment.ProcessId, capabilities,
@@ -119,7 +124,7 @@ internal sealed class PipeServer
             }
             catch (IOException ex)
             {
-                Console.WriteLine($"[pipe] client disconnected: {ex.Message}");
+                HelperLog.Write($"[pipe] client disconnected: {ex.Message}");
             }
             finally
             {
@@ -138,11 +143,32 @@ internal sealed class PipeServer
             var message = IpcProtocol.EncodeSnapshot(readingsFactory(), NextSequence(), NowMs());
             stream.Write(message, 0, message.Length);
 
-            var events = _frameTime.Drain(IpcProtocol.MaxFrameEvents);
-            var stats = IpcProtocol.EncodeFrameTimeStats(events, _frameTime.State,
-                                                         _frameTime.TargetPid, _frameTime.ClockFrequency,
-                                                         NextSequence(), NowMs());
-            stream.Write(stats, 0, stats.Length);
+            // Drain the whole pending present queue, not just one packet's worth: a high-refresh
+            // title produces more presents per tick than a single bounded message can carry, and
+            // dropping the excess corrupts both the average and the lows. Keep emitting packed
+            // messages until a short batch; always emit at least one so state/health flow even with
+            // no presents.
+            var sentStats = false;
+            while (true)
+            {
+                var events = _frameTime.Drain(IpcProtocol.MaxFrameEvents);
+                if (events.Count == 0 && sentStats)
+                {
+                    break;
+                }
+                var stats = IpcProtocol.EncodeFrameTimeStats(events, _frameTime.State,
+                                                             _frameTime.TargetPid,
+                                                             _frameTime.ClockFrequency,
+                                                             _frameTime.EventsLost,
+                                                             _frameTime.QueueDrops,
+                                                             NextSequence(), NowMs());
+                stream.Write(stats, 0, stats.Length);
+                sentStats = true;
+                if (events.Count < IpcProtocol.MaxFrameEvents)
+                {
+                    break;
+                }
+            }
             stream.Flush();
 
             if (token.WaitHandle.WaitOne(interval))
@@ -214,6 +240,7 @@ internal sealed class PipeServer
                 var payload = span.Slice(offset + IpcProtocol.HeaderSize, payloadLength);
                 if (IpcProtocol.TryDecodeCaptureCommand(payload, out var command, out var pid))
                 {
+                    HelperLog.Write($"[pipe] capture command={command} pid={pid}");
                     if (command == IpcProtocol.FrameCaptureCommandStart)
                     {
                         frameTime.Start(pid);
@@ -248,7 +275,7 @@ internal sealed class PipeServer
         if (magic != IpcProtocol.Magic || version != IpcProtocol.ProtocolVersion ||
             kind != IpcProtocol.MessageKindHello || payloadLength > IpcProtocol.MaxPayloadBytes)
         {
-            Console.WriteLine("[pipe] rejected a malformed Hello header");
+            HelperLog.Write("[pipe] rejected a malformed Hello header");
             return false;
         }
 

@@ -10,7 +10,7 @@ namespace Pacecar.Sensors;
 internal static class IpcProtocol
 {
     public const uint Magic = 0x50434152u; // "PCAR"
-    public const ushort ProtocolVersion = 1;
+    public const ushort ProtocolVersion = 2;
     public const int HeaderSize = 24;
     public const int MaxPayloadBytes = 4096;
     public const int MaxMessageBytes = MaxPayloadBytes + 64;
@@ -29,9 +29,9 @@ internal static class IpcProtocol
     public const int MessageKindFrameCaptureCommand = 6;
 
     // Frame-time extension (task T17). Must match `Pacecar.Core/Metrics/IpcProtocol.h`.
-    public const int MaxFrameEvents = 120;
-    public const int FrameEventSize = 32;
-    public const int FrameTimeStatsFixedSize = 8 + 8 + 8 + 4 + 4 + 4 + 4;
+    public const int MaxFrameEvents = 100;
+    public const int FrameEventSize = 40;
+    public const int FrameTimeStatsFixedSize = 8 + 8 + 8 + 4 + 4 + 4 + 4 + 4 + 4;
     public const int FrameTimeStatsPayloadSize = FrameTimeStatsFixedSize +
                                                 (FrameEventSize * MaxFrameEvents);
     public const int FrameCaptureCommandPayloadSize = 8;
@@ -78,8 +78,8 @@ internal static class IpcProtocol
     public readonly record struct Reading(ushort Id, bool Available, int Index, double Value);
 
     /// <summary>One decoded present event (task T17). Durations are -1 when unknown.</summary>
-    public readonly record struct FrameEvent(ulong QpcTicks, long CpuTicks, long GpuTicks, uint Pid,
-                                             ushort Kind);
+    public readonly record struct FrameEvent(ulong QpcTicks, long CpuTicks, long GpuTicks,
+                                             ulong SwapChain, uint Pid, ushort Kind);
 
     private static void WriteHeader(Span<byte> buffer, int kind, int payloadLength, uint sequence,
                                     ulong timestampMs)
@@ -150,8 +150,8 @@ internal static class IpcProtocol
     /// twice.
     /// </summary>
     public static byte[] EncodeFrameTimeStats(IReadOnlyList<FrameEvent> events, uint captureState,
-                                              uint targetPid, ulong qpcFrequency, uint sequence,
-                                              ulong timestampMs)
+                                              uint targetPid, ulong qpcFrequency, uint eventsLost,
+                                              uint queueDrops, uint sequence, ulong timestampMs)
     {
         var message = new byte[HeaderSize + FrameTimeStatsPayloadSize];
         WriteHeader(message, MessageKindFrameTimeStats, FrameTimeStatsPayloadSize, sequence,
@@ -166,7 +166,9 @@ internal static class IpcProtocol
 
         var count = (uint)Math.Min(events.Count, MaxFrameEvents);
         BinaryPrimitives.WriteUInt32LittleEndian(payload[32..], count);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload[36..], 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload[36..], eventsLost);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload[40..], queueDrops);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload[44..], 0);
 
         for (var i = 0; i < count; i++)
         {
@@ -175,9 +177,10 @@ internal static class IpcProtocol
             BinaryPrimitives.WriteUInt64LittleEndian(payload[offset..], ev.QpcTicks);
             BinaryPrimitives.WriteInt64LittleEndian(payload[(offset + 8)..], ev.CpuTicks);
             BinaryPrimitives.WriteInt64LittleEndian(payload[(offset + 16)..], ev.GpuTicks);
-            BinaryPrimitives.WriteUInt32LittleEndian(payload[(offset + 24)..], ev.Pid);
-            BinaryPrimitives.WriteUInt16LittleEndian(payload[(offset + 28)..], ev.Kind);
-            BinaryPrimitives.WriteUInt16LittleEndian(payload[(offset + 30)..], 0);
+            BinaryPrimitives.WriteUInt64LittleEndian(payload[(offset + 24)..], ev.SwapChain);
+            BinaryPrimitives.WriteUInt32LittleEndian(payload[(offset + 32)..], ev.Pid);
+            BinaryPrimitives.WriteUInt16LittleEndian(payload[(offset + 36)..], ev.Kind);
+            BinaryPrimitives.WriteUInt16LittleEndian(payload[(offset + 38)..], 0);
         }
 
         return message;

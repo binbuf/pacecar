@@ -13,10 +13,14 @@ using namespace pacecar::ipc;
 TEST(IpcProtocol, FixedLayoutIsStable)
 {
     EXPECT_EQ(kMagic, 0x50434152u);
-    EXPECT_EQ(kProtocolVersion, 1u);
+    EXPECT_EQ(kProtocolVersion, 2u);
     EXPECT_EQ(sizeof(MessageHeader), 24u);
     EXPECT_EQ(sizeof(SensorReading), 16u);
     EXPECT_LE(sizeof(SensorSnapshotPayload), kMaxPayloadBytes);
+    // Frame-time v2: the event gained the swap-chain identity and the stats gained health counters.
+    EXPECT_EQ(sizeof(FrameEventPayload), 40u);
+    EXPECT_EQ(sizeof(FrameTimeStatsPayload), 48u + (40u * kMaxFrameEvents));
+    EXPECT_LE(sizeof(FrameTimeStatsPayload), kMaxPayloadBytes);
 }
 
 TEST(IpcProtocol, RoundTripsSensorSnapshot)

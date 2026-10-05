@@ -138,6 +138,77 @@ TEST(FrameTimeProcessor, ClockFrequencyConvertsTicks)
     EXPECT_NEAR(stats.fps, 200.0, 0.01);
 }
 
+TEST(FrameTimeProcessor, ReportsBusiestSwapChainOnly)
+{
+    FrameTimeProcessor processor;
+
+    // Main chain (id 1) at 60 FPS: one interval of 16.6667 ms.
+    PresentEvent main0 = Present(0);
+    main0.swapChain = 1;
+    PresentEvent main1 = Present(166'667);
+    main1.swapChain = 1;
+
+    // Secondary chain (id 2) at 120 FPS: two intervals of 8.3333 ms -> busier, so it wins.
+    PresentEvent aux0 = Present(0);
+    aux0.swapChain = 2;
+    PresentEvent aux1 = Present(83'333);
+    aux1.swapChain = 2;
+    PresentEvent aux2 = Present(166'666);
+    aux2.swapChain = 2;
+
+    static_cast<void>(processor.AddPresent(main0));
+    static_cast<void>(processor.AddPresent(aux0));
+    static_cast<void>(processor.AddPresent(aux1));
+    static_cast<void>(processor.AddPresent(main1));
+    static_cast<void>(processor.AddPresent(aux2));
+
+    const FrameTimeStats stats = processor.Compute();
+    ASSERT_TRUE(stats.valid);
+    EXPECT_EQ(stats.sampleCount, 2u);
+    EXPECT_NEAR(stats.frameTimeMs, 8.3333, 0.01);
+    EXPECT_NEAR(stats.fps, 120.0, 0.2);
+    // The 60 FPS chain's 16.6667 ms interval must never leak into the reported stats.
+    EXPECT_LT(stats.frameTimeMs, 10.0);
+}
+
+TEST(FrameTimeProcessor, PidChangeResetsAllSwapChains)
+{
+    FrameTimeProcessor processor;
+
+    PresentEvent first = Present(0, 1);
+    first.swapChain = 1;
+    PresentEvent second = Present(100, 1);
+    second.swapChain = 1;
+    static_cast<void>(processor.AddPresent(first));
+    EXPECT_TRUE(processor.AddPresent(second));
+    EXPECT_EQ(processor.SampleCount(), 1u);
+
+    // A new process restarts the baseline for the same swap-chain id.
+    PresentEvent next0 = Present(0, 2);
+    next0.swapChain = 1;
+    PresentEvent next1 = Present(100, 2);
+    next1.swapChain = 1;
+    EXPECT_FALSE(processor.AddPresent(next0));
+    EXPECT_TRUE(processor.AddPresent(next1));
+    EXPECT_EQ(processor.SampleCount(), 1u);
+}
+
+TEST(FrameTimeProcessor, HandlesMoreSwapChainsThanTracked)
+{
+    FrameTimeProcessor processor;
+    // Nine distinct chains exceed the tracked limit; the extra one is ignored, not fatal.
+    for (std::uint64_t chain = 0; chain < 9; ++chain)
+    {
+        PresentEvent event = Present(100 * chain);
+        event.swapChain = chain;
+        static_cast<void>(processor.AddPresent(event));
+    }
+    PresentEvent again = Present(100);
+    again.swapChain = 0;
+    static_cast<void>(processor.AddPresent(again));
+    EXPECT_EQ(processor.SampleCount(), 1u);
+}
+
 TEST(FrameCaptureStatus, MapsConflictAndErrorStates)
 {
     EXPECT_TRUE(FrameCaptureStateIsActive(FrameCaptureState::Capturing));
