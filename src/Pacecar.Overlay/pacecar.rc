@@ -25,9 +25,9 @@ LANGUAGE 9, 1
 //
 
 // Icon with lowest ID value placed first to ensure application icon
-// remains consistent on all systems.
-IDI_PACECAR       ICON         "pacecar.ico"
-IDI_SMALL         ICON         "small.ico"
+// remains consistent on all systems. Shared with the canonical source asset.
+IDI_PACECAR       ICON         "..\\..\\assets\\app.ico"
+IDI_SMALL         ICON         "..\\..\\assets\\app.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //

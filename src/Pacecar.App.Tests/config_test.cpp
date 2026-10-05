@@ -198,6 +198,7 @@ const char* kDefaultConfigJson = R"JSON({
     "mainboard_temperature": true,
     "deep_sensors": false,
     "fps_capture": false,
+    "fps_show_frame_time": false,
     "disk_temp_mode": "selected_disk",
     "fan_mode": "highest",
     "mainboard_mode": "highest",

@@ -220,7 +220,7 @@ void AppendStatPiece(wchar_t* buffer, std::size_t size, const wchar_t* piece) no
 // Builds the single-line value shown for one stat in the StatRows view. Writes into `buffer` and
 // returns it as a view; an unavailable metric yields "--". `buffer` must hold at least 128 wchars.
 std::wstring_view FormatStatRow(TileId id, const pacecar::metrics::MetricsSnapshot& snapshot,
-                                wchar_t* buffer, std::size_t size) noexcept
+                                bool showFrameTime, wchar_t* buffer, std::size_t size) noexcept
 {
     buffer[0] = L'\0';
     wchar_t piece[48] = {};
@@ -344,8 +344,12 @@ std::wstring_view FormatStatRow(TileId id, const pacecar::metrics::MetricsSnapsh
         }
         _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%.0f FPS", snapshot.frame.fps);
         AppendStatPiece(buffer, size, piece);
-        _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%.1f ms", snapshot.frame.frameTimeMs);
-        AppendStatPiece(buffer, size, piece);
+        if (showFrameTime)
+        {
+            _snwprintf_s(piece, std::size(piece), _TRUNCATE, L"%.1f ms",
+                         snapshot.frame.frameTimeMs);
+            AppendStatPiece(buffer, size, piece);
+        }
         break;
     }
     case TileId::Fans: {
@@ -597,6 +601,8 @@ void WidgetScene::DrawStatRows(ID2D1RenderTarget* target, const ResolvedTheme& t
     // advance width, so the value column starts at a single x and all detail columns sit flush. The
     // block is pushed as close to the right edge as it fits, hugging the top-right corner.
     const bool haveFrame = frame_ && frame_->snapshot;
+    const bool showFrameTime =
+        settings_.tiles[static_cast<std::size_t>(TileId::Fps)].fields.secondary;
     wchar_t buffer[128] = {};
 
     float iconWidth = 0.0f;
@@ -611,7 +617,8 @@ void WidgetScene::DrawStatRows(ID2D1RenderTarget* target, const ResolvedTheme& t
         const wchar_t icon[2] = {IconFor(id), L'\0'};
         iconWidth = std::max(iconWidth, text_.MeasureWidth(styles_.statIcon, icon));
         const std::wstring_view value =
-            haveFrame ? FormatStatRow(id, *frame_->snapshot, buffer, std::size(buffer))
+            haveFrame ? FormatStatRow(id, *frame_->snapshot, showFrameTime, buffer,
+                                      std::size(buffer))
                       : std::wstring_view(DemoFor(id).primary);
         valueWidth = std::max(valueWidth, text_.MeasureWidth(styles_.statValue, value));
     }
@@ -650,8 +657,8 @@ void WidgetScene::DrawStatRows(ID2D1RenderTarget* target, const ResolvedTheme& t
         }
         const TileId id = static_cast<TileId>(i);
         const std::wstring_view value = haveFrame
-                                            ? FormatStatRow(id, *frame_->snapshot, buffer,
-                                                            std::size(buffer))
+                                            ? FormatStatRow(id, *frame_->snapshot, showFrameTime,
+                                                            buffer, std::size(buffer))
                                             : std::wstring_view(DemoFor(id).primary);
 
         const wchar_t icon[2] = {IconFor(id), L'\0'};

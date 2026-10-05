@@ -300,6 +300,28 @@ TEST(Layout, FpsOnlyViewShowsOnlyFpsWithoutVisualization)
     ExpectNoOverlapAndContained(result, kWidth, kHeight);
 }
 
+TEST(Layout, FpsFrameTimeLineIsOptInAndOffByDefault)
+{
+    pacecar::Config config = pacecar::Config::Defaults();
+    config.general.view = ViewMode::FpsOnly;
+    config.sensors.fps_capture = true;
+    const std::size_t fps = static_cast<std::size_t>(TileId::Fps);
+
+    // Frame time is off by default even though capture is on.
+    config.sensors.fps_show_frame_time = false;
+    EXPECT_FALSE(LayoutSettingsFromConfig(config).tiles[fps].fields.secondary);
+
+    config.sensors.fps_show_frame_time = true;
+    EXPECT_TRUE(LayoutSettingsFromConfig(config).tiles[fps].fields.secondary);
+    EXPECT_TRUE(LayoutSettingsFromConfig(config).tiles[fps].fields.primary);
+
+    // The toggle also governs the plain-text FpsText view.
+    config.general.view = ViewMode::FpsText;
+    EXPECT_TRUE(LayoutSettingsFromConfig(config).tiles[fps].fields.secondary);
+    config.sensors.fps_show_frame_time = false;
+    EXPECT_FALSE(LayoutSettingsFromConfig(config).tiles[fps].fields.secondary);
+}
+
 TEST(Layout, SmallTextViewIsTextOnlyAndCompact)
 {
     pacecar::Config config = pacecar::Config::Defaults();

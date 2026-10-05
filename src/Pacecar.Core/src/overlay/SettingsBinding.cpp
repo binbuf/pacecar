@@ -424,6 +424,17 @@ void SettingsBinding::SetDeepSensorsEnabled(bool enabled)
     Changed();
 }
 
+bool SettingsBinding::FpsShowFrameTime() const noexcept
+{
+    return config_.sensors.fps_show_frame_time;
+}
+
+void SettingsBinding::SetFpsShowFrameTime(bool enabled)
+{
+    config_.sensors.fps_show_frame_time = enabled;
+    Changed();
+}
+
 std::string_view SettingsBinding::Selection(DeviceKind kind) const noexcept
 {
     switch (kind)

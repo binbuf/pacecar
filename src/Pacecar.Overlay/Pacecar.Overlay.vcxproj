@@ -125,9 +125,8 @@
   <ItemGroup>
     <Manifest Include="app.manifest" />
   </ItemGroup>
-  <ItemGroup>
-    <Image Include="pacecar.ico" />
-    <Image Include="small.ico" />
+<ItemGroup>
+    <Image Include="..\..\assets\app.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Pacecar.Core\Pacecar.Core.vcxproj">

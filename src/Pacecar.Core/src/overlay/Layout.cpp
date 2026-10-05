@@ -441,6 +441,13 @@ LayoutSettings LayoutSettingsFromConfig(const pacecar::Config& config) noexcept
     }
 
     ApplyViewMode(settings, config.general.view);
+
+    // The frame-time ("ms") line is opt-in and off by default. It is frame duration (1000 / FPS),
+    // not input latency. Apply after the view mode so this single toggle governs every view
+    // (including the FpsOnly view's otherwise-forced secondary/tertiary lines).
+    TileSettings& fps = settings.tiles[static_cast<std::size_t>(TileId::Fps)];
+    fps.fields.secondary = config.sensors.fps_show_frame_time;
+    fps.fields.tertiary = config.sensors.fps_show_frame_time;
     return settings;
 }
 

@@ -1,6 +1,7 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
 // Used by pacecar.rc
+#pragma once
 
 #define IDS_APP_TITLE			103
 

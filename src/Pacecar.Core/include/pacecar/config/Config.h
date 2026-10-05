@@ -227,6 +227,9 @@ struct SensorsConfig
     // Opt-in FPS / frame-time capture via the helper's ETW session (task T17). Default off; capture
     // never runs unless explicitly enabled and is shown only while active.
     bool fps_capture = false;
+    // When true, the FPS tile also shows the mean frame time ("ms") line (1000 / FPS). This is
+    // frame duration, not input/response latency. Default off.
+    bool fps_show_frame_time = false;
     DiskTempMode disk_temp_mode = DiskTempMode::SelectedDisk;
     FanSpeedMode fan_mode = FanSpeedMode::Highest;
     MainboardTempMode mainboard_mode = MainboardTempMode::Highest;

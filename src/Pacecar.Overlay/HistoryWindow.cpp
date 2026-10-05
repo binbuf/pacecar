@@ -15,6 +15,7 @@
 #include <span>
 #include <vector>
 
+#include "pacecar.h"
 #include "pacecar/metrics/HistoryRetention.h"
 
 namespace pacecar::overlay
@@ -38,6 +39,8 @@ bool EnsureClass(HINSTANCE instance)
     windowClass.style = CS_HREDRAW | CS_VREDRAW;
     windowClass.lpfnWndProc = HistoryWindow::StaticWndProc;
     windowClass.hInstance = instance;
+    windowClass.hIcon = LoadAppIcon(instance, false);
+    windowClass.hIconSm = LoadAppIcon(instance, true);
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.hbrBackground = GetSysColorBrush(COLOR_WINDOW);
     windowClass.lpszClassName = kHistoryClassName;

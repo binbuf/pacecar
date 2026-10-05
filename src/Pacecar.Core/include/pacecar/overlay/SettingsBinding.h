@@ -174,6 +174,9 @@ class SettingsBinding
     // (the window/app layer performs the launch; the binding only maps the config flag).
     [[nodiscard]] bool DeepSensorsEnabled() const noexcept;
     void SetDeepSensorsEnabled(bool enabled);
+    // Show the frame-time ("ms") line on the FPS tile. Off by default.
+    [[nodiscard]] bool FpsShowFrameTime() const noexcept;
+    void SetFpsShowFrameTime(bool enabled);
     [[nodiscard]] std::string_view Selection(DeviceKind kind) const noexcept;
     void SetSelection(DeviceKind kind, std::string value);
     [[nodiscard]] int DiskTempModeIndex() const noexcept;

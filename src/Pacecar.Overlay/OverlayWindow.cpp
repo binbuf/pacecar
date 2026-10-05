@@ -16,6 +16,7 @@
 #include <wtsapi32.h>
 
 #include "Widgets/SystemTheme.h"
+#include "pacecar.h"
 #include "pacecar/overlay/Layout.h"
 #include "pacecar/util/Logger.h"
 
@@ -102,6 +103,8 @@ bool EnsureWindowClass(HINSTANCE instance)
     windowClass.style = 0;
     windowClass.lpfnWndProc = OverlayWindow::StaticWindowProc;
     windowClass.hInstance = instance;
+    windowClass.hIcon = LoadAppIcon(instance, false);
+    windowClass.hIconSm = LoadAppIcon(instance, true);
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.hbrBackground = nullptr;
     windowClass.lpszClassName = kWindowClassName;

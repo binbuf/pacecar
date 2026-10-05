@@ -10,6 +10,7 @@
 #include <commctrl.h>
 
 #include "OverlayWindow.h"
+#include "pacecar.h"
 #include "pacecar/app/HotkeySpec.h"
 #include "pacecar/util/Logger.h"
 
@@ -51,6 +52,7 @@ constexpr int kIdTileVisComboBase = 1220;
 
 constexpr int kIdSensorToggleBase = 1300;
 constexpr int kIdDeepSensorsToggle = 1306; // after the six per-sensor toggles (1300..1305)
+constexpr int kIdFpsFrameTimeToggle = 1307; // show frame time (ms) next to FPS
 constexpr int kIdDeviceComboBase = 1320;
 constexpr int kIdDiskTempCombo = 1330;
 constexpr int kIdFanModeCombo = 1331;
@@ -232,6 +234,8 @@ bool EnsureClasses(HINSTANCE instance)
         windowClass.style = CS_HREDRAW | CS_VREDRAW;
         windowClass.lpfnWndProc = SettingsWindow::StaticWndProc;
         windowClass.hInstance = instance;
+        windowClass.hIcon = LoadAppIcon(instance, false);
+        windowClass.hIconSm = LoadAppIcon(instance, true);
         windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         windowClass.hbrBackground = GetSysColorBrush(COLOR_BTNFACE);
         windowClass.lpszClassName = kSettingsClassName;
@@ -632,6 +636,13 @@ void SettingsWindow::BuildSensorsPage()
                    hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdDeepSensorsToggle)),
                    instance_, nullptr));
 
+    AddControl(page,
+               CreateWindowExW(
+                   0, L"BUTTON", L"Show frame time (ms) next to FPS",
+                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 16, 176 + 7 * 24, 340, 22,
+                   hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdFpsFrameTimeToggle)),
+                   instance_, nullptr));
+
     AddControl(page, MakeLabel(hwnd_, instance_, L"Disk temp mode:", 340, 44, 130));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Fan mode:", 340, 72, 130));
     AddControl(page, MakeLabel(hwnd_, instance_, L"Mainboard mode:", 340, 100, 130));
@@ -824,6 +835,7 @@ void SettingsWindow::RefreshFromConfig()
         setCheck(kIdSensorToggleBase + i, binding_->SensorEnabled(toggles[i]));
     }
     setCheck(kIdDeepSensorsToggle, binding_->DeepSensorsEnabled());
+    setCheck(kIdFpsFrameTimeToggle, binding_->FpsShowFrameTime());
 
     const std::array<DeviceKind, 4> kinds{DeviceKind::Gpu, DeviceKind::Cpu, DeviceKind::Nic,
                                           DeviceKind::Disk};
@@ -1149,6 +1161,12 @@ void SettingsWindow::OnCommand(int controlId, int notifyCode, HWND /*control*/)
     if (controlId == kIdDeepSensorsToggle)
     {
         binding_->SetDeepSensorsEnabled(isChecked(controlId));
+        return;
+    }
+
+    if (controlId == kIdFpsFrameTimeToggle)
+    {
+        binding_->SetFpsShowFrameTime(isChecked(controlId));
         return;
     }
 
