@@ -18,9 +18,6 @@ jobs:
   build:
     name: Build, test, and release (win-x64)
     runs-on: windows-latest
-    env:
-      # Prefer the runner's vcpkg; scripts/build.ps1 falls back to the copy bundled with VS if unset.
-      VCPKG_ROOT: ${{ env.VCPKG_INSTALLATION_ROOT }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -83,7 +80,10 @@ jobs:
         shell: pwsh
         env:
           PLATFORM_TOOLSET: ${{ steps.toolset.outputs.value }}
-        run: ./scripts/build.ps1 -Configuration Release -Test -PlatformToolset $env:PLATFORM_TOOLSET
+        run: |
+          # Prefer the runner's vcpkg; build.ps1 falls back to the copy bundled with VS if unset.
+          if ($env:VCPKG_INSTALLATION_ROOT) { $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT }
+          ./scripts/build.ps1 -Configuration Release -Test -PlatformToolset $env:PLATFORM_TOOLSET
 
       - name: Stage release files
         shell: pwsh
