@@ -11,7 +11,7 @@ Native Win32 + Direct2D + DirectWrite · C++20 · static CRT · no runtime depen
 [![Tests](https://img.shields.io/badge/tests-Google%20Test-34A853)](#testing)
 [![Overhead](https://img.shields.io/badge/design-goal-%3C15%20MB%20private%20WS-yellow)](#performance)
 
-<img src="assets/screenshot.png" alt="Pacecar overlay running over a desktop" width="860">
+<img src="assets/screenshot.png" alt="Pacecar overlay running over a desktop" width="430">
 
 </div>
 

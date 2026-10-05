@@ -65,6 +65,9 @@ build/*
 /out/
 /vcpkg_installed/
 
+# Release packaging output (portable zip + Inno Setup installer)
+/dist/
+
 # symphony harness (local tool, not tracked)
 .symphony/
 .stop

@@ -16,7 +16,10 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
     [switch]$Clean,
-    [switch]$Test
+    [switch]$Test,
+    # Override the project's pinned MSVC platform toolset (e.g. v143 on a CI image that has no
+    # v145). Omitted by default so local builds use the .vcxproj value.
+    [string]$PlatformToolset
 )
 
 $ErrorActionPreference = 'Stop'
@@ -78,6 +81,7 @@ $msbuildArgs = @(
 )
 $vcpkgRoot = Get-VcpkgRoot
 if ($vcpkgRoot) { $msbuildArgs += "/p:VcpkgRoot=$vcpkgRoot" }
+if ($PlatformToolset) { $msbuildArgs += "/p:PlatformToolset=$PlatformToolset" }
 
 Write-Host "build: $($solution.Name) $Configuration|x64"
 & $msbuild @msbuildArgs

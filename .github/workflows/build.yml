@@ -1,0 +1,148 @@
+name: Build & Release
+
+# Active only once this file lives on `main`. Pushing the feature branch does nothing; a push to
+# `main` builds + tests, and a `v*` tag on a commit that is on `main` publishes a GitHub Release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, test, and release (win-x64)
+    runs-on: windows-latest
+    env:
+      # Prefer the runner's vcpkg; scripts/build.ps1 falls back to the copy bundled with VS if unset.
+      VCPKG_ROOT: ${{ env.VCPKG_INSTALLATION_ROOT }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure the tag is on main
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          git fetch --no-tags origin main
+          $sha = (git rev-parse HEAD).Trim()
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Tag $env:GITHUB_REF_NAME points at $sha, which is not on main. Refusing to release."
+          }
+
+      - name: Detect MSVC toolset
+        id: toolset
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          if (-not $vs) { throw 'Visual Studio with the MSBuild component was not found on the runner.' }
+          # Enumerate the platform toolsets MSBuild actually registers (e.g. v143, v145) instead of
+          # guessing from VC\Tools\MSVC folder names, which do not map 1:1 to platform toolsets.
+          $toolsets = Get-ChildItem (Join-Path $vs 'MSBuild\Microsoft\VC') -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              $pt = Join-Path $_.FullName 'Platforms\x64\PlatformToolsets'
+              if (Test-Path $pt) { Get-ChildItem $pt -Directory | Select-Object -ExpandProperty Name }
+            } | Sort-Object -Unique
+          Write-Host "Registered platform toolsets: $($toolsets -join ', ')"
+          $chosen = $toolsets | Where-Object { $_ -match '^v1[0-9]{2}$' } |
+            Sort-Object { [int]($_ -replace '^v', '') } -Descending | Select-Object -First 1
+          if (-not $chosen) { throw 'No MSVC platform toolset was registered for x64.' }
+          Write-Host "Using platform toolset $chosen"
+          "value=$chosen" >> $env:GITHUB_OUTPUT
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME -replace '^[vV]', '' } else { '0.0.0' }
+          Write-Host "Version: $version"
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache vcpkg dependencies
+        uses: actions/cache@v4
+        with:
+          path: vcpkg_installed
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
+      - name: Build Release|x64 and run tests
+        shell: pwsh
+        env:
+          PLATFORM_TOOLSET: ${{ steps.toolset.outputs.value }}
+        run: ./scripts/build.ps1 -Configuration Release -Test -PlatformToolset $env:PLATFORM_TOOLSET
+
+      - name: Stage release files
+        shell: pwsh
+        run: |
+          $rel = 'out\x64\Release'
+          $stage = 'dist\Pacecar'
+          $relRoot = (Resolve-Path $rel).Path
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Get-ChildItem $rel -Recurse -File | Where-Object {
+            $_.Extension -notin '.pdb', '.lib', '.exp', '.ilk' -and $_.Name -notmatch 'Tests?\.exe$'
+          } | ForEach-Object {
+            $dest = Join-Path $stage $_.FullName.Substring($relRoot.Length).TrimStart('\', '/')
+            New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+            Copy-Item $_.FullName $dest
+          }
+          Copy-Item 'helper\Pacecar.Sensors\THIRD_PARTY_NOTICES.md' $stage -Force
+          Get-ChildItem $stage -Recurse -File | Sort-Object FullName | Select-Object FullName, Length | Format-Table
+
+      - name: Build portable zip
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          Compress-Archive -Path "dist\Pacecar\*" -DestinationPath "dist\Pacecar-$env:APP_VERSION-win-x64.zip" -Force
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 7\ISCC.exe"
+          )
+          $iscc = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $iscc) { $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source }
+          if (-not $iscc) { throw 'Inno Setup compiler (ISCC.exe) was not found on the runner.' }
+          $source = (Resolve-Path 'dist\Pacecar').Path
+          Write-Host "Compiling installer with $iscc (version $env:APP_VERSION)"
+          & $iscc "/DAppVersion=$env:APP_VERSION" "/DSourceDir=$source" 'installer\pacecar.iss'
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE." }
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pacecar-win-x64
+          path: |
+            dist/Pacecar-*-win-x64.zip
+            dist/Pacecar-*-setup.exe
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Pacecar-${{ steps.version.outputs.value }}-win-x64.zip
+            dist/Pacecar-${{ steps.version.outputs.value }}-setup.exe
+          generate_release_notes: true
+          fail_on_unmatched_files: true
