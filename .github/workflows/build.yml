@@ -76,6 +76,22 @@ jobs:
           key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: vcpkg-${{ runner.os }}-
 
+      - name: Fetch vcpkg baseline
+        shell: pwsh
+        run: |
+          # The runner's vcpkg checkout may not contain the manifest's pinned baseline commit, so
+          # vcpkg cannot resolve port versions and install fails. Fetch that exact commit first.
+          $root = $env:VCPKG_INSTALLATION_ROOT
+          if (-not $root -or -not (Test-Path (Join-Path $root '.git'))) {
+            Write-Host 'No git-based vcpkg checkout at VCPKG_INSTALLATION_ROOT; skipping.'
+            exit 0
+          }
+          $baseline = (Get-Content 'vcpkg.json' -Raw | ConvertFrom-Json).'builtin-baseline'
+          if (-not $baseline) { Write-Host 'vcpkg.json has no builtin-baseline; skipping.'; exit 0 }
+          Write-Host "Fetching vcpkg baseline $baseline into $root"
+          git -C $root fetch origin $baseline
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch vcpkg baseline commit $baseline." }
+
       - name: Build Release|x64 and run tests
         shell: pwsh
         env:
